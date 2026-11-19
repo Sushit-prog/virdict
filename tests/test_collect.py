@@ -229,6 +229,44 @@ def test_collect_prefers_distinct_workflows(
 
 
 @respx.mock
+def test_collect_honors_per_repo_with_many_workflows(
+    client: GitHubClient,
+    tmp_path: Path,
+) -> None:
+    runs = [run_payload(run_id=run_id, workflow_id=run_id * 10) for run_id in range(1, 7)]
+    respx.get(RUNS_URL).mock(return_value=httpx.Response(200, json=runs_response(*runs)))
+
+    def jobs_for_run(request: httpx.Request) -> httpx.Response:
+        run_id = int(request.url.path.split("/")[-2])
+        return httpx.Response(
+            200,
+            json=jobs_response(job_payload(job_id=run_id + 100)),
+        )
+
+    jobs_route = respx.get(
+        url__regex=r"https://api\.github\.com/repos/o/r/actions/runs/\d+/jobs"
+    ).mock(side_effect=jobs_for_run)
+    respx.get(url__regex=r"https://api\.github\.com/repos/o/r/actions/workflows/\d+/runs").mock(
+        return_value=httpx.Response(200, json=runs_response())
+    )
+    respx.get(url__regex=r"https://api\.github\.com/repos/o/r/actions/jobs/\d+/logs").mock(
+        return_value=httpx.Response(200, content=b"log\n")
+    )
+
+    summary = collect_repos(
+        client,
+        ["o/r"],
+        per_repo=3,
+        out=tmp_path,
+        now=DEFAULT_NOW,
+    )
+
+    assert summary.repos[0].runs_saved == 3
+    assert len(list((tmp_path / "o__r").iterdir())) == 3
+    assert jobs_route.call_count == 3
+
+
+@respx.mock
 def test_collect_records_later_green_false(
     client: GitHubClient,
     tmp_path: Path,

@@ -200,6 +200,8 @@ def _collect_repo(
     while handled < per_repo and any(groups.values()):
         progressed = False
         for key in list(groups):
+            if handled >= per_repo:
+                break
             queue = groups[key]
             while queue:
                 run = queue.popleft()
