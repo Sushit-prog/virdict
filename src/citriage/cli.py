@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 from typing import Annotated
 
@@ -61,6 +62,20 @@ def collect(
         Path,
         typer.Option("--out", help="Output directory for raw snapshots."),
     ] = Path("data/raw"),
+    exclude_workflow: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--exclude-workflow",
+            help="Regex matched against workflow name/path. Repeatable.",
+        ),
+    ] = None,
+    no_default_excludes: Annotated[
+        bool,
+        typer.Option(
+            "--no-default-excludes",
+            help="Disable the built-in workflow exclusion patterns.",
+        ),
+    ] = False,
 ) -> None:
     token = _token()
     if not token:
@@ -85,6 +100,8 @@ def collect(
                 per_repo=per_repo,
                 out=out,
                 extra_secrets=(token,),
+                exclude_patterns=tuple(exclude_workflow or ()),
+                include_default_excludes=not no_default_excludes,
             )
     except MissingTokenError as exc:
         typer.secho(str(exc), err=True, fg=typer.colors.RED)
@@ -92,6 +109,13 @@ def collect(
     except AuthenticationError as exc:
         typer.secho(str(exc), err=True, fg=typer.colors.RED)
         raise typer.Exit(1) from exc
+    except re.error as exc:
+        typer.secho(
+            f"Invalid --exclude-workflow regex: {exc}",
+            err=True,
+            fg=typer.colors.RED,
+        )
+        raise typer.Exit(2) from exc
     except CitriageError as exc:
         typer.secho(str(exc), err=True, fg=typer.colors.RED)
         raise typer.Exit(1) from exc

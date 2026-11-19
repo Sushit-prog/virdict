@@ -26,6 +26,24 @@ def _read_meta(path: Path) -> dict[str, Any]:
     return json.loads((path / "meta.json").read_text(encoding="utf-8"))
 
 
+def _aggregator_log() -> bytes:
+    return (
+        b"2026-11-19T00:00:00Z lint: success\n"
+        b"2026-11-19T00:00:01Z typecheck: success\n"
+        b"2026-11-19T00:00:02Z code-quality: failure\n"
+        b"2026-11-19T00:00:03Z ##[error]Process completed with exit code 1.\n"
+    )
+
+
+def _real_error_log() -> bytes:
+    return (
+        b"2026-11-19T00:00:00Z lint: success\n"
+        b"2026-11-19T00:00:01Z typecheck: success\n"
+        b"2026-11-19T00:00:02Z code-quality: failure\n"
+        b"2026-11-19T00:00:03Z ##[error]real failure\n"
+    )
+
+
 @respx.mock
 def test_collect_writes_redacted_meta_and_logs(
     client: GitHubClient,
@@ -88,6 +106,9 @@ def test_collect_writes_redacted_meta_and_logs(
 
     assert summary.repos[0].runs_saved == 1
     assert summary.repos[0].jobs_saved == 1
+    assert summary.repos[0].candidates_evaluated == 1
+    assert summary.repos[0].excluded == 0
+    assert summary.repos[0].skipped_aggregator_only == 0
 
     run_path = tmp_path / "o__r" / "100"
     meta = _read_meta(run_path)
@@ -123,6 +144,9 @@ def test_collect_writes_redacted_meta_and_logs(
     assert "Repo" in rendered
     assert "Runs saved" in rendered
     assert "Jobs saved" in rendered
+    assert "Candidates evaluated" in rendered
+    assert "Excluded" in rendered
+    assert "Aggregator-only" in rendered
     assert "Median log" in rendered
     assert "Max log" in rendered
     assert "Rate limit remaining" in rendered
@@ -262,8 +286,314 @@ def test_collect_honors_per_repo_with_many_workflows(
     )
 
     assert summary.repos[0].runs_saved == 3
+    assert summary.repos[0].candidates_evaluated == 3
     assert len(list((tmp_path / "o__r").iterdir())) == 3
     assert jobs_route.call_count == 3
+
+
+@respx.mock
+def test_collect_excludes_default_workflows_by_name_and_path(
+    client: GitHubClient,
+    tmp_path: Path,
+) -> None:
+    runs = [
+        run_payload(
+            run_id=1,
+            workflow_id=10,
+            name="Duplicate issue check (Codex)",
+        ),
+        run_payload(
+            run_id=2,
+            workflow_id=20,
+            name="CI",
+            workflow_path=".github/workflows/codeql.yml",
+        ),
+        run_payload(run_id=3, workflow_id=30, name="CI"),
+    ]
+    respx.get(RUNS_URL).mock(return_value=httpx.Response(200, json=runs_response(*runs)))
+
+    def jobs_for_run(request: httpx.Request) -> httpx.Response:
+        run_id = int(request.url.path.split("/")[-2])
+        return httpx.Response(
+            200,
+            json=jobs_response(job_payload(job_id=run_id + 100)),
+        )
+
+    jobs_route = respx.get(
+        url__regex=r"https://api\.github\.com/repos/o/r/actions/runs/\d+/jobs"
+    ).mock(side_effect=jobs_for_run)
+    respx.get(url__regex=r"https://api\.github\.com/repos/o/r/actions/workflows/\d+/runs").mock(
+        return_value=httpx.Response(200, json=runs_response())
+    )
+    respx.get(url__regex=r"https://api\.github\.com/repos/o/r/actions/jobs/\d+/logs").mock(
+        return_value=httpx.Response(200, content=b"log\n")
+    )
+
+    summary = collect_repos(
+        client,
+        ["o/r"],
+        per_repo=1,
+        out=tmp_path,
+        now=DEFAULT_NOW,
+    )
+
+    assert summary.repos[0].runs_saved == 1
+    assert summary.repos[0].candidates_evaluated == 1
+    assert summary.repos[0].excluded == 2
+    assert jobs_route.call_count == 1
+    assert not (tmp_path / "o__r" / "1").exists()
+    assert not (tmp_path / "o__r" / "2").exists()
+    assert (tmp_path / "o__r" / "3").exists()
+
+
+@respx.mock
+def test_collect_excludes_custom_regex_case_insensitively(
+    client: GitHubClient,
+    tmp_path: Path,
+) -> None:
+    run = run_payload(
+        run_id=1,
+        name="Special Workflow",
+        workflow_path=".github/workflows/special.yml",
+    )
+    respx.get(RUNS_URL).mock(return_value=httpx.Response(200, json=runs_response(run)))
+    jobs_route = respx.get(url__regex=r"https://api\.github\.com/repos/o/r/actions/runs/\d+/jobs")
+
+    summary = collect_repos(
+        client,
+        ["o/r"],
+        per_repo=1,
+        out=tmp_path,
+        exclude_patterns=("special",),
+        include_default_excludes=False,
+        now=DEFAULT_NOW,
+    )
+
+    assert summary.repos[0].runs_saved == 0
+    assert summary.repos[0].candidates_evaluated == 0
+    assert summary.repos[0].excluded == 1
+    assert not jobs_route.called
+
+
+@respx.mock
+def test_collect_without_default_excludes_collects_codeql(
+    client: GitHubClient,
+    tmp_path: Path,
+) -> None:
+    run = run_payload(
+        run_id=1,
+        name="CodeQL",
+        workflow_path=".github/workflows/codeql.yml",
+    )
+    respx.get(RUNS_URL).mock(return_value=httpx.Response(200, json=runs_response(run)))
+    respx.get("https://api.github.com/repos/o/r/actions/runs/1/jobs").mock(
+        return_value=httpx.Response(200, json=jobs_response(job_payload(job_id=101)))
+    )
+    respx.get("https://api.github.com/repos/o/r/actions/workflows/10/runs").mock(
+        return_value=httpx.Response(200, json=runs_response())
+    )
+    respx.get("https://api.github.com/repos/o/r/actions/jobs/101/logs").mock(
+        return_value=httpx.Response(200, content=b"log\n")
+    )
+
+    summary = collect_repos(
+        client,
+        ["o/r"],
+        per_repo=1,
+        out=tmp_path,
+        include_default_excludes=False,
+        now=DEFAULT_NOW,
+    )
+
+    assert summary.repos[0].runs_saved == 1
+    assert summary.repos[0].candidates_evaluated == 1
+    assert summary.repos[0].excluded == 0
+
+
+@respx.mock
+def test_collect_skips_aggregator_only_run_by_failed_step(
+    client: GitHubClient,
+    tmp_path: Path,
+) -> None:
+    run = run_payload(run_id=1, workflow_id=10, name="lint")
+    job = job_payload(
+        job_id=501,
+        name="lint passed",
+        steps=[{"name": "Require every lint job to succeed", "conclusion": "failure"}],
+    )
+    respx.get(RUNS_URL).mock(return_value=httpx.Response(200, json=runs_response(run)))
+    respx.get("https://api.github.com/repos/o/r/actions/runs/1/jobs").mock(
+        return_value=httpx.Response(200, json=jobs_response(job))
+    )
+    success_route = respx.get("https://api.github.com/repos/o/r/actions/workflows/10/runs").mock(
+        return_value=httpx.Response(200, json=runs_response())
+    )
+    respx.get("https://api.github.com/repos/o/r/actions/jobs/501/logs").mock(
+        return_value=httpx.Response(200, content=b"log\n")
+    )
+
+    summary = collect_repos(
+        client,
+        ["o/r"],
+        per_repo=1,
+        out=tmp_path,
+        now=DEFAULT_NOW,
+    )
+
+    assert summary.repos[0].runs_saved == 0
+    assert summary.repos[0].jobs_saved == 0
+    assert summary.repos[0].candidates_evaluated == 1
+    assert summary.repos[0].skipped_aggregator_only == 1
+    assert not (tmp_path / "o__r" / "1").exists()
+    assert not success_route.called
+
+
+@respx.mock
+def test_collect_keeps_mixed_run_and_sets_aggregator_flags(
+    client: GitHubClient,
+    tmp_path: Path,
+) -> None:
+    run = run_payload(run_id=1, workflow_id=10)
+    respx.get(RUNS_URL).mock(return_value=httpx.Response(200, json=runs_response(run)))
+    respx.get("https://api.github.com/repos/o/r/actions/runs/1/jobs").mock(
+        return_value=httpx.Response(
+            200,
+            json=jobs_response(
+                job_payload(job_id=501, name="summary"),
+                job_payload(job_id=502, name="tests"),
+            ),
+        )
+    )
+    respx.get("https://api.github.com/repos/o/r/actions/workflows/10/runs").mock(
+        return_value=httpx.Response(200, json=runs_response())
+    )
+
+    def log_for_job(request: httpx.Request) -> httpx.Response:
+        if "/501/" in request.url.path:
+            return httpx.Response(200, content=_aggregator_log())
+        return httpx.Response(200, content=_real_error_log())
+
+    respx.get(url__regex=r"https://api\.github\.com/repos/o/r/actions/jobs/\d+/logs").mock(
+        side_effect=log_for_job
+    )
+
+    summary = collect_repos(
+        client,
+        ["o/r"],
+        per_repo=1,
+        out=tmp_path,
+        now=DEFAULT_NOW,
+    )
+
+    assert summary.repos[0].runs_saved == 1
+    assert summary.repos[0].jobs_saved == 2
+    assert summary.repos[0].candidates_evaluated == 1
+    assert summary.repos[0].skipped_aggregator_only == 0
+    meta = _read_meta(tmp_path / "o__r" / "1")
+    flags = {job["id"]: job["likely_aggregator"] for job in meta["failed_jobs"]}
+    assert flags == {501: True, 502: False}
+
+
+@respx.mock
+def test_collect_aggregator_skip_does_not_count_toward_per_repo(
+    client: GitHubClient,
+    tmp_path: Path,
+) -> None:
+    runs = [
+        run_payload(run_id=1, workflow_id=10, name="lint"),
+        run_payload(run_id=2, workflow_id=20),
+        run_payload(run_id=3, workflow_id=30),
+        run_payload(run_id=4, workflow_id=40),
+    ]
+    respx.get(RUNS_URL).mock(return_value=httpx.Response(200, json=runs_response(*runs)))
+
+    def jobs_for_run(request: httpx.Request) -> httpx.Response:
+        run_id = int(request.url.path.split("/")[-2])
+        if run_id == 1:
+            job = job_payload(
+                job_id=501,
+                name="lint passed",
+                steps=[
+                    {
+                        "name": "Require every lint job to succeed",
+                        "conclusion": "failure",
+                    }
+                ],
+            )
+        else:
+            job = job_payload(job_id=run_id + 100)
+        return httpx.Response(200, json=jobs_response(job))
+
+    respx.get(url__regex=r"https://api\.github\.com/repos/o/r/actions/runs/\d+/jobs").mock(
+        side_effect=jobs_for_run
+    )
+    respx.get(url__regex=r"https://api\.github\.com/repos/o/r/actions/workflows/\d+/runs").mock(
+        return_value=httpx.Response(200, json=runs_response())
+    )
+    respx.get(url__regex=r"https://api\.github\.com/repos/o/r/actions/jobs/\d+/logs").mock(
+        return_value=httpx.Response(200, content=b"log\n")
+    )
+
+    summary = collect_repos(
+        client,
+        ["o/r"],
+        per_repo=3,
+        out=tmp_path,
+        now=DEFAULT_NOW,
+    )
+
+    assert summary.repos[0].runs_saved == 3
+    assert summary.repos[0].candidates_evaluated == 4
+    assert summary.repos[0].skipped_aggregator_only == 1
+    assert not (tmp_path / "o__r" / "1").exists()
+    assert (tmp_path / "o__r" / "2").exists()
+    assert (tmp_path / "o__r" / "3").exists()
+    assert (tmp_path / "o__r" / "4").exists()
+
+
+@respx.mock
+def test_collect_stops_after_40_candidates(
+    client: GitHubClient,
+    tmp_path: Path,
+) -> None:
+    runs = [
+        run_payload(run_id=run_id, workflow_id=run_id * 10, name=f"CI {run_id}")
+        for run_id in range(1, 42)
+    ]
+    respx.get(RUNS_URL).mock(return_value=httpx.Response(200, json=runs_response(*runs)))
+
+    def jobs_for_run(request: httpx.Request) -> httpx.Response:
+        run_id = int(request.url.path.split("/")[-2])
+        return httpx.Response(
+            200,
+            json=jobs_response(
+                job_payload(
+                    job_id=run_id + 100,
+                    steps=[{"name": "gate", "conclusion": "failure"}],
+                )
+            ),
+        )
+
+    jobs_route = respx.get(
+        url__regex=r"https://api\.github\.com/repos/o/r/actions/runs/\d+/jobs"
+    ).mock(side_effect=jobs_for_run)
+    respx.get(url__regex=r"https://api\.github\.com/repos/o/r/actions/jobs/\d+/logs").mock(
+        return_value=httpx.Response(200, content=b"log\n")
+    )
+
+    summary = collect_repos(
+        client,
+        ["o/r"],
+        per_repo=3,
+        out=tmp_path,
+        now=DEFAULT_NOW,
+    )
+
+    assert summary.repos[0].runs_saved == 0
+    assert summary.repos[0].candidates_evaluated == 40
+    assert summary.repos[0].skipped_aggregator_only == 40
+    assert jobs_route.call_count == 40
+    assert not (tmp_path / "o__r").exists()
 
 
 @respx.mock

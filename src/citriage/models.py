@@ -71,6 +71,7 @@ class FailedJobMeta(BaseModel):
     started_at: datetime | None = None
     completed_at: datetime | None = None
     failed_step_names: list[str] = Field(default_factory=list)
+    likely_aggregator: bool = False
 
 
 class PullRequestMeta(BaseModel):

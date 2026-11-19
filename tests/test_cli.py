@@ -77,3 +77,19 @@ def test_token_never_appears_in_error_output(
 
     assert result.exit_code == 2
     assert "super-secret-token" not in result.output
+
+
+def test_invalid_exclude_regex_is_rejected(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("GITHUB_TOKEN", "test-token")
+    result = CliRunner().invoke(
+        app,
+        ["collect", "--repo", "o/r", "--exclude-workflow", "["],
+    )
+
+    assert result.exit_code == 2
+    assert "Invalid --exclude-workflow regex" in result.output
+    assert "test-token" not in result.output

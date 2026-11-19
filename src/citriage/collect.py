@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import re
 from collections import deque
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -27,6 +29,18 @@ from citriage.models import (
 from citriage.redact import redact
 from citriage.storage import read_run_meta, run_dir, write_run
 
+DEFAULT_EXCLUDE_PATTERN = (
+    r"codeql|labeler|stale|triage|dependabot|release|publish|deploy|scorecard|"
+    r"greet|assign|autolabel|codex|claude|copilot|classify"
+)
+AGGREGATOR_STATUS_RE = re.compile(r"^\S.*: (success|failure|skipped|cancelled)$")
+AGGREGATOR_STEP_RE = re.compile(
+    r"require|all.*(succeed|pass)|gate|status check",
+    re.IGNORECASE,
+)
+PROCESS_EXIT_PREFIX = "Process completed with exit code"
+MAX_CANDIDATES_PER_REPO = 40
+
 
 @dataclass
 class RepoSummary:
@@ -34,6 +48,9 @@ class RepoSummary:
     runs_saved: int = 0
     jobs_saved: int = 0
     runs_skipped: int = 0
+    candidates_evaluated: int = 0
+    excluded: int = 0
+    skipped_aggregator_only: int = 0
     log_sizes: list[int] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
 
@@ -52,6 +69,18 @@ class CollectSummary:
     def total_skipped(self) -> int:
         return sum(repo.runs_skipped for repo in self.repos)
 
+    @property
+    def total_candidates_evaluated(self) -> int:
+        return sum(repo.candidates_evaluated for repo in self.repos)
+
+    @property
+    def total_excluded(self) -> int:
+        return sum(repo.excluded for repo in self.repos)
+
+    @property
+    def total_skipped_aggregator_only(self) -> int:
+        return sum(repo.skipped_aggregator_only for repo in self.repos)
+
 
 def _job_meta(job: Job) -> FailedJobMeta:
     return FailedJobMeta(
@@ -69,6 +98,41 @@ def _job_meta(job: Job) -> FailedJobMeta:
 
 def _signature(job: FailedJobMeta, extra_secrets: tuple[str, ...]) -> str:
     return redact(job.name, extra_secrets).strip().lower()
+
+
+def _compile_excludes(
+    patterns: Sequence[str],
+    *,
+    include_default_excludes: bool,
+) -> list[re.Pattern[str]]:
+    raw = [DEFAULT_EXCLUDE_PATTERN] if include_default_excludes else []
+    raw.extend(patterns)
+    return [re.compile(pattern, re.IGNORECASE) for pattern in raw]
+
+
+def _is_excluded(run: WorkflowRun, patterns: list[re.Pattern[str]]) -> bool:
+    values = [run.name, run.workflow_path]
+    return any(
+        pattern.search(value) for pattern in patterns for value in values if value is not None
+    )
+
+
+def _is_likely_aggregator(job: FailedJobMeta, log_text: str) -> bool:
+    if len(job.failed_step_names) == 1 and AGGREGATOR_STEP_RE.search(job.failed_step_names[0]):
+        return True
+
+    lines = log_text.splitlines()[-40:]
+    status_lines = sum(1 for line in lines if AGGREGATOR_STATUS_RE.match(line))
+    if status_lines < 3:
+        return False
+
+    for line in lines:
+        if "##[error]" not in line:
+            continue
+        message = line.split("##[error]", 1)[1].strip()
+        if not message.startswith(PROCESS_EXIT_PREFIX):
+            return False
+    return True
 
 
 def _later_green(
@@ -91,9 +155,10 @@ def _fetch_logs(
     repo: str,
     failed_jobs: list[FailedJobMeta],
     extra_secrets: tuple[str, ...],
-) -> tuple[list[LogMeta], dict[str, bytes]]:
+) -> tuple[list[LogMeta], dict[str, bytes], set[int]]:
     logs: list[LogMeta] = []
     files: dict[str, bytes] = {}
+    aggregator_ids: set[int] = set()
     for job in failed_jobs:
         download = client.download_job_log(
             owner,
@@ -103,6 +168,8 @@ def _fetch_logs(
             ceiling_bytes=DEFAULT_CEILING_BYTES,
         )
         text = download.content.decode("utf-8", errors="replace")
+        if _is_likely_aggregator(job, text):
+            aggregator_ids.add(job.id)
         content = redact(text, extra_secrets).encode("utf-8")
         written_truncated = False
         if len(content) > DEFAULT_KEEP_BYTES:
@@ -125,7 +192,7 @@ def _fetch_logs(
                 truncation_side="head_dropped" if truncated else None,
             )
         )
-    return logs, files
+    return logs, files, aggregator_ids
 
 
 def _build_meta(
@@ -181,6 +248,7 @@ def _collect_repo(
     out: Path,
     now: datetime,
     extra_secrets: tuple[str, ...],
+    exclude_patterns: list[re.Pattern[str]],
 ) -> None:
     owner, name = repo_summary.repo.split("/", 1)
     failed_runs = client.list_failed_runs(
@@ -189,22 +257,41 @@ def _collect_repo(
         since=now - timedelta(days=80),
     )
 
-    groups: dict[str, deque[WorkflowRun]] = {}
+    kept_runs: list[WorkflowRun] = []
     for run in failed_runs:
+        if _is_excluded(run, exclude_patterns):
+            repo_summary.excluded += 1
+        else:
+            kept_runs.append(run)
+
+    groups: dict[str, deque[WorkflowRun]] = {}
+    for run in kept_runs:
         key = str(run.workflow_id) if run.workflow_id is not None else (run.name or "unknown")
         groups.setdefault(key, deque()).append(run)
 
     used_signatures: dict[str, set[tuple[str, ...]]] = {key: set() for key in groups}
-    handled = 0
 
-    while handled < per_repo and any(groups.values()):
+    while (
+        repo_summary.runs_saved < per_repo
+        and repo_summary.candidates_evaluated < MAX_CANDIDATES_PER_REPO
+        and any(groups.values())
+    ):
         progressed = False
         for key in list(groups):
-            if handled >= per_repo:
+            if (
+                repo_summary.runs_saved >= per_repo
+                or repo_summary.candidates_evaluated >= MAX_CANDIDATES_PER_REPO
+            ):
                 break
             queue = groups[key]
             while queue:
+                if (
+                    repo_summary.runs_saved >= per_repo
+                    or repo_summary.candidates_evaluated >= MAX_CANDIDATES_PER_REPO
+                ):
+                    break
                 run = queue.popleft()
+                repo_summary.candidates_evaluated += 1
                 path = run_dir(out, repo_summary.repo, run.id)
                 existing_meta = read_run_meta(path) if path.exists() else None
 
@@ -212,7 +299,6 @@ def _collect_repo(
                     repo_summary.errors.append(
                         f"run {run.id}: existing run directory has no readable meta.json; skipped"
                     )
-                    handled += 1
                     repo_summary.runs_skipped += 1
                     progressed = True
                     break
@@ -240,20 +326,28 @@ def _collect_repo(
                 used_signatures[key].add(signature)
 
                 if already_saved:
-                    handled += 1
                     repo_summary.runs_skipped += 1
                     progressed = True
                     break
 
                 try:
-                    later_green = _later_green(client, owner, name, run)
-                    logs, log_files = _fetch_logs(
+                    logs, log_files, aggregator_ids = _fetch_logs(
                         client,
                         owner,
                         name,
                         failed_jobs,
                         extra_secrets,
                     )
+                    failed_jobs = [
+                        job.model_copy(update={"likely_aggregator": job.id in aggregator_ids})
+                        for job in failed_jobs
+                    ]
+                    if all(job.likely_aggregator for job in failed_jobs):
+                        repo_summary.skipped_aggregator_only += 1
+                        progressed = True
+                        break
+
+                    later_green = _later_green(client, owner, name, run)
                     meta = _build_meta(
                         run,
                         repo_summary.repo,
@@ -274,7 +368,6 @@ def _collect_repo(
                     repo_summary.errors.append(f"run {run.id}: {exc}")
                     continue
 
-                handled += 1
                 if wrote:
                     repo_summary.runs_saved += 1
                     repo_summary.jobs_saved += len(logs)
@@ -295,11 +388,17 @@ def collect_repos(
     per_repo: int,
     out: Path,
     extra_secrets: tuple[str, ...] = (),
+    exclude_patterns: Sequence[str] = (),
+    include_default_excludes: bool = True,
     now: datetime | None = None,
 ) -> CollectSummary:
     if per_repo < 1:
         raise ValueError("per_repo must be positive")
 
+    compiled_excludes = _compile_excludes(
+        exclude_patterns,
+        include_default_excludes=include_default_excludes,
+    )
     collected_at = now or datetime.now(UTC)
     summary = CollectSummary(
         repos=[RepoSummary(repo=repo) for repo in repos],
@@ -314,6 +413,7 @@ def collect_repos(
                 out=out,
                 now=collected_at,
                 extra_secrets=extra_secrets,
+                exclude_patterns=compiled_excludes,
             )
         except RateLimitExhausted as exc:
             summary.stopped_reason = str(exc)

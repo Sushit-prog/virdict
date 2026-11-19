@@ -18,14 +18,26 @@ def _median(values: list[int]) -> int:
 
 
 def render_summary(summary: CollectSummary) -> str:
-    headers = ("Repo", "Runs saved", "Jobs saved", "Median log", "Max log")
-    rows: list[tuple[str, str, str, str, str]] = []
+    headers = (
+        "Repo",
+        "Runs saved",
+        "Jobs saved",
+        "Candidates evaluated",
+        "Excluded",
+        "Aggregator-only",
+        "Median log",
+        "Max log",
+    )
+    rows: list[tuple[str, ...]] = []
     for repo in summary.repos:
         rows.append(
             (
                 repo.repo,
                 str(repo.runs_saved),
                 str(repo.jobs_saved),
+                str(repo.candidates_evaluated),
+                str(repo.excluded),
+                str(repo.skipped_aggregator_only),
                 format_bytes(_median(repo.log_sizes)),
                 format_bytes(max(repo.log_sizes, default=0)),
             )
@@ -37,6 +49,9 @@ def render_summary(summary: CollectSummary) -> str:
             "TOTAL",
             str(sum(repo.runs_saved for repo in summary.repos)),
             str(sum(repo.jobs_saved for repo in summary.repos)),
+            str(sum(repo.candidates_evaluated for repo in summary.repos)),
+            str(sum(repo.excluded for repo in summary.repos)),
+            str(sum(repo.skipped_aggregator_only for repo in summary.repos)),
             format_bytes(_median(all_sizes)),
             format_bytes(max(all_sizes, default=0)),
         )
@@ -46,28 +61,15 @@ def render_summary(summary: CollectSummary) -> str:
         max(len(headers[index]), *(len(row[index]) for row in rows))
         for index in range(len(headers))
     ]
-    lines = [
-        f"{headers[0]:<{widths[0]}}  "
-        f"{headers[1]:>{widths[1]}}  "
-        f"{headers[2]:>{widths[2]}}  "
-        f"{headers[3]:>{widths[3]}}  "
-        f"{headers[4]:>{widths[4]}}"
-    ]
-    lines.append(
-        f"{'-' * widths[0]}  "
-        f"{'-' * widths[1]}  "
-        f"{'-' * widths[2]}  "
-        f"{'-' * widths[3]}  "
-        f"{'-' * widths[4]}"
-    )
-    for row in rows:
-        lines.append(
-            f"{row[0]:<{widths[0]}}  "
-            f"{row[1]:>{widths[1]}}  "
-            f"{row[2]:>{widths[2]}}  "
-            f"{row[3]:>{widths[3]}}  "
-            f"{row[4]:>{widths[4]}}"
+
+    def format_row(row: tuple[str, ...]) -> str:
+        return "  ".join(
+            f"{cell:<{widths[index]}}" if index == 0 else f"{cell:>{widths[index]}}"
+            for index, cell in enumerate(row)
         )
+
+    lines = [format_row(headers), format_row(tuple("-" * width for width in widths))]
+    lines.extend(format_row(row) for row in rows)
 
     remaining = (
         "unknown" if summary.rate_limit_remaining is None else str(summary.rate_limit_remaining)
