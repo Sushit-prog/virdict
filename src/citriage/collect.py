@@ -31,15 +31,17 @@ from citriage.storage import read_run_meta, run_dir, write_run
 
 DEFAULT_EXCLUDE_PATTERN = (
     r"codeql|labeler|stale|triage|dependabot|release|publish|deploy|scorecard|"
-    r"greet|assign|autolabel|codex|claude|copilot|classify"
+    r"greet|assign|autolabel|codex|claude|copilot|classify|cla|assistant|cla-signers"
 )
 AGGREGATOR_STATUS_RE = re.compile(r"^\S.*: (success|failure|skipped|cancelled)$")
 AGGREGATOR_STEP_RE = re.compile(
-    r"require|all.*(succeed|pass)|gate|status check",
+    r"require|all.*(succeed|pass)|gate|status check|decide whether|needed jobs|"
+    r"verify every case|all.*jobs? (succeeded|passed)|^run false$",
     re.IGNORECASE,
 )
+DEPENDABOT_STEP_RE = re.compile(r"^run dependabot$", re.IGNORECASE)
 PROCESS_EXIT_PREFIX = "Process completed with exit code"
-MAX_CANDIDATES_PER_REPO = 40
+MAX_CANDIDATES_PER_REPO = 60
 
 
 @dataclass
@@ -111,14 +113,27 @@ def _compile_excludes(
 
 
 def _is_excluded(run: WorkflowRun, patterns: list[re.Pattern[str]]) -> bool:
+    if (run.event or "").strip().lower() == "dynamic":
+        return True
+    workflow_path = (run.workflow_path or "").replace("\\", "/").lower()
+    if workflow_path.startswith("dynamic/"):
+        return True
     values = [run.name, run.workflow_path]
     return any(
         pattern.search(value) for pattern in patterns for value in values if value is not None
     )
 
 
+def _has_dependabot_step(failed_jobs: list[FailedJobMeta]) -> bool:
+    return any(
+        DEPENDABOT_STEP_RE.search(step) for job in failed_jobs for step in job.failed_step_names
+    )
+
+
 def _is_likely_aggregator(job: FailedJobMeta, log_text: str) -> bool:
-    if len(job.failed_step_names) == 1 and AGGREGATOR_STEP_RE.search(job.failed_step_names[0]):
+    if job.failed_step_names and all(
+        AGGREGATOR_STEP_RE.search(step) for step in job.failed_step_names
+    ):
         return True
 
     lines = log_text.splitlines()[-40:]
@@ -327,6 +342,11 @@ def _collect_repo(
                 if not failed_jobs:
                     continue
 
+                if _has_dependabot_step(failed_jobs):
+                    repo_summary.excluded += 1
+                    progressed = True
+                    break
+
                 signature = tuple(sorted(_signature(job, extra_secrets) for job in failed_jobs))
                 if signature in used_signatures[key]:
                     continue
@@ -461,6 +481,11 @@ def _collect_flakes_repo(
                 failed_jobs = [_job_meta(job) for job in jobs]
                 if not failed_jobs:
                     continue
+
+                if _has_dependabot_step(failed_jobs):
+                    repo_summary.excluded += 1
+                    progressed = True
+                    break
 
                 try:
                     logs, log_files, aggregator_ids = _fetch_logs(

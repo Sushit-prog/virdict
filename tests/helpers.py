@@ -20,6 +20,7 @@ def run_payload(
     conclusion: str = "failure",
     created_at: datetime | None = None,
     run_attempt: int = 1,
+    event: str = "push",
     pull_requests: list[dict[str, Any]] | None = None,
     head_repository: str | None = "o/r",
 ) -> dict[str, Any]:
@@ -29,7 +30,7 @@ def run_payload(
         "name": name,
         "workflow_id": workflow_id,
         "workflow_path": workflow_path,
-        "event": "push",
+        "event": event,
         "conclusion": conclusion,
         "head_sha": head_sha,
         "head_branch": "main",
