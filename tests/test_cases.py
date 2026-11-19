@@ -1,5 +1,8 @@
+import hashlib
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+
+import pytest
 
 from citriage.cases import SEED, build_cases, case_split, load_cases
 from citriage.labels import LabelName
@@ -77,3 +80,57 @@ def test_build_cases_indexes_steps_siblings_signatures_and_splits(tmp_path: Path
     assert all(case.split == case_split(SEED, "o/r", "abc123") for case in cases)
     assert all(case.b0_label == LabelName.TEST_FAILURE for case in cases)
     assert sum(case.flake_confirmed for case in cases) == 1
+    assert all(case.in_benchmark for case in cases)
+    assert all(case.exclusion_reason == "none" for case in cases)
+    assert all(case.html_url.startswith("https://github.com/o/r/actions/runs/") for case in cases)
+
+
+def test_case_id_uses_run_directory_and_step(tmp_path: Path) -> None:
+    raw = tmp_path / "raw"
+    run_path = raw / "o__r" / "2_a2"
+    run_path.mkdir(parents=True)
+    base = datetime(2026, 11, 20, 12, 0, tzinfo=UTC)
+    meta = _meta(2, [20], base, True)
+    meta.failed_jobs[0].failed_step_names = ["Run tests"]
+    (run_path / "meta.json").write_text(meta.model_dump_json(), encoding="utf-8")
+    (run_path / "job_20.log").write_text(LOG, encoding="utf-8")
+
+    case = build_cases(raw, tmp_path / "cases.jsonl")[0]
+
+    digest = hashlib.sha1(b"Run tests").hexdigest()[:8]
+    assert case.case_id == f"2_a2:{digest}"
+    assert case.run_dir_name == "2_a2"
+    assert case.failed_step_names == ["Run tests"]
+    assert case.html_url == meta.html_url
+
+
+@pytest.mark.parametrize(
+    ("workflow_name", "steps", "aggregator", "reason"),
+    [
+        ("Backport label added", ["Run actions/github-script@v9.0.0"], False, "non_ci"),
+        ("CI", ["Run actions/github-script@v9.0.0", "Run tests"], False, "none"),
+        ("CI", ["Decide whether to run tests"], True, "aggregator"),
+    ],
+)
+def test_case_exclusion_reasons(
+    tmp_path: Path,
+    workflow_name: str,
+    steps: list[str],
+    aggregator: bool,
+    reason: str,
+) -> None:
+    raw = tmp_path / "raw"
+    run_path = raw / "o__r" / "1"
+    run_path.mkdir(parents=True)
+    base = datetime(2026, 11, 20, 12, 0, tzinfo=UTC)
+    meta = _meta(1, [10], base, False)
+    meta.workflow_name = workflow_name
+    meta.failed_jobs[0].failed_step_names = steps
+    meta.failed_jobs[0].likely_aggregator = aggregator
+    (run_path / "meta.json").write_text(meta.model_dump_json(), encoding="utf-8")
+    (run_path / "job_10.log").write_text(LOG, encoding="utf-8")
+
+    case = build_cases(raw, tmp_path / "cases.jsonl")[0]
+
+    assert case.exclusion_reason == reason
+    assert case.in_benchmark is (reason == "none")

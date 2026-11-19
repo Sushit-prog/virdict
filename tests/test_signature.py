@@ -31,6 +31,21 @@ def test_signature_matches_similar_first_evidence() -> None:
     assert signature_from_log(first) == signature_from_log(second)
 
 
-def test_empty_log_has_stable_signature() -> None:
+def test_empty_log_has_no_signature() -> None:
     parsed = parse_log("")
-    assert signature_from_log(parsed) == signature_from_log(parsed)
+    assert signature_from_log(parsed) is None
+
+
+def test_tail_only_log_has_no_signature() -> None:
+    parsed = parse_log(
+        "\n".join(
+            [
+                "##[group]Run actions/github-script",
+                "script: process.exit(1);",
+                "##[error]Process completed with exit code 1.",
+            ]
+        )
+    )
+    assert parsed.evidence
+    assert all(item.kind == "tail" for item in parsed.evidence)
+    assert signature_from_log(parsed) is None

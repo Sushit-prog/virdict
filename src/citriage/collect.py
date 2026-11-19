@@ -31,7 +31,8 @@ from citriage.storage import read_run_meta, run_dir, write_run
 
 DEFAULT_EXCLUDE_PATTERN = (
     r"codeql|labeler|stale|triage|dependabot|release|publish|deploy|scorecard|"
-    r"greet|assign|autolabel|codex|claude|copilot|classify|cla|assistant|cla-signers"
+    r"greet|assign|autolabel|codex|claude|copilot|classify|\bcla\b|assistant|"
+    r"cla-signers|\bbackport\b|github-script"
 )
 AGGREGATOR_STATUS_RE = re.compile(r"^\S.*: (success|failure|skipped|cancelled)$")
 AGGREGATOR_STEP_RE = re.compile(
@@ -40,6 +41,7 @@ AGGREGATOR_STEP_RE = re.compile(
     re.IGNORECASE,
 )
 DEPENDABOT_STEP_RE = re.compile(r"^run dependabot$", re.IGNORECASE)
+NON_CI_STEP_RE = re.compile(r"\bbackport\b|actions/github-script|^github-script", re.IGNORECASE)
 PROCESS_EXIT_PREFIX = "Process completed with exit code"
 MAX_CANDIDATES_PER_REPO = 60
 
@@ -127,6 +129,13 @@ def _is_excluded(run: WorkflowRun, patterns: list[re.Pattern[str]]) -> bool:
 def _has_dependabot_step(failed_jobs: list[FailedJobMeta]) -> bool:
     return any(
         DEPENDABOT_STEP_RE.search(step) for job in failed_jobs for step in job.failed_step_names
+    )
+
+
+def _has_non_ci_step(failed_jobs: list[FailedJobMeta]) -> bool:
+    return any(
+        job.failed_step_names and all(NON_CI_STEP_RE.search(step) for step in job.failed_step_names)
+        for job in failed_jobs
     )
 
 
@@ -342,7 +351,7 @@ def _collect_repo(
                 if not failed_jobs:
                     continue
 
-                if _has_dependabot_step(failed_jobs):
+                if _has_dependabot_step(failed_jobs) or _has_non_ci_step(failed_jobs):
                     repo_summary.excluded += 1
                     progressed = True
                     break
@@ -482,7 +491,7 @@ def _collect_flakes_repo(
                 if not failed_jobs:
                     continue
 
-                if _has_dependabot_step(failed_jobs):
+                if _has_dependabot_step(failed_jobs) or _has_non_ci_step(failed_jobs):
                     repo_summary.excluded += 1
                     progressed = True
                     break

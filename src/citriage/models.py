@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field
 
 type OriginalBytes = int | Literal["50MiB+"]
 
@@ -52,7 +52,10 @@ class WorkflowRun(BaseModel):
     id: int
     name: str | None = None
     workflow_id: int | None = None
-    workflow_path: str | None = None
+    workflow_path: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("path", "workflow_path"),
+    )
     event: str | None = None
     conclusion: str | None = None
     head_sha: str | None = None

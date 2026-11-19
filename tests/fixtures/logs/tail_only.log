@@ -1,0 +1,7 @@
+##[group]Run actions/github-script@v9.0.0
+with:
+  script: const pr = await github.rest.pulls.get({ owner: context.repo.owner });
+if (!pr.data.labels.find(l => l.name.startsWith("backport")))
+  process.exit(1);
+##[endgroup]
+Cleaning up orphan processes

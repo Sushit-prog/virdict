@@ -25,10 +25,11 @@ def signature(tool: str, text: str) -> str:
     return hashlib.sha1(payload.encode()).hexdigest()
 
 
-def signature_from_log(parsed: ParsedLog) -> str:
-    if not parsed.evidence:
-        return signature("", "")
-    first = parsed.evidence[0]
+def signature_from_log(parsed: ParsedLog) -> str | None:
+    evidence = [item for item in parsed.evidence if item.kind != "tail"]
+    if not evidence:
+        return None
+    first = evidence[0]
     return signature(first.tool, first.text)
 
 

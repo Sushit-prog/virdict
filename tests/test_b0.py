@@ -67,3 +67,28 @@ def test_b0_no_evidence_is_unknown() -> None:
     assert result.label == LabelName.UNKNOWN
     assert result.culprit_file is None
     assert result.evidence_ids == []
+
+
+def test_b0_recognizes_new_lint_formats() -> None:
+    for name in ("actionlint.log", "ratchet_ruff.log", "pre_commit.log"):
+        parsed = parse_log((FIXTURES / name).read_text(encoding="utf-8"))
+        assert predict(parsed).label == LabelName.LINT_FORMAT, name
+
+
+def test_b0_recognizes_basedpyright_ratchet_as_type_error() -> None:
+    parsed = parse_log((FIXTURES / "ratchet_basedpyright.log").read_text(encoding="utf-8"))
+    assert predict(parsed).label == LabelName.TYPE_ERROR
+
+
+def test_b0_ignores_tail_evidence() -> None:
+    tail = Evidence(
+        id="tail",
+        kind="tail",
+        line_no=2,
+        text="script: process.exit(1);",
+        tool="unknown",
+        in_region=True,
+    )
+    result = predict(ParsedLog(1, 3, [tail], [], False))
+    assert result.label == LabelName.UNKNOWN
+    assert result.evidence_ids == []

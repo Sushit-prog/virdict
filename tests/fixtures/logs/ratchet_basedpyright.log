@@ -1,0 +1,7 @@
+##[group]Run Check basedpyright (delta vs merge-base counts)
+base counts fetched from CI artifact basedpyright-counts-abc
+FAIL: basedpyright errors grew past their ceiling (base 755762847f6e):
+  reportUnknownArgumentType: total 17610 over ceiling 17609 (this change added 1)
+BREACHED RULES: reportUnknownArgumentType
+##[error]Process completed with exit code 1.
+##[group]Post job cleanup.

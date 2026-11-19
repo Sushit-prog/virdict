@@ -1,0 +1,5 @@
+##[group]Run Lint workflows
+resolver/download actionlint
+.github/workflows/ci.yml:129:9: shellcheck reported issue in this script [shellcheck]
+##[error]Process completed with exit code 1.
+##[group]Post job cleanup.

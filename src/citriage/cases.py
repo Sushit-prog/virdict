@@ -2,19 +2,23 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from collections import Counter, defaultdict
 from datetime import datetime
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from citriage.baselines.b0 import predict
+from citriage.collect import DEFAULT_EXCLUDE_PATTERN, NON_CI_STEP_RE
 from citriage.labels import LabelName
 from citriage.models import FailedJobMeta
 from citriage.parse.logparse import Evidence, ParsedLog, parse_log
 from citriage.signature import signature_from_log
 from citriage.storage import read_run_meta
+
+_WORKFLOW_EXCLUDE_RE = re.compile(DEFAULT_EXCLUDE_PATTERN, re.IGNORECASE)
 
 SEED = "citriage-cases-v1"
 CASES_PATH = Path("data/cases.jsonl")
@@ -26,17 +30,22 @@ class Case(BaseModel):
     case_id: str
     repo: str
     run_id: int
+    run_dir_name: str = ""
     head_sha: str
     created_at: datetime
     workflow_name: str
+    html_url: str = ""
     step: str
+    failed_step_names: list[str] = Field(default_factory=list)
     job_id: int
     job_name: str
     sibling_job_ids: list[int]
-    signature: str
-    signature_rank: int
+    signature: str | None
+    signature_rank: int | None
     likely_aggregator: bool
     flake_confirmed: bool
+    in_benchmark: bool = True
+    exclusion_reason: Literal["aggregator", "non_ci", "none"] = "none"
     split: Literal["dev", "test"]
     seed: str
     region_start: int
@@ -73,6 +82,27 @@ def _distinct_steps(failed_jobs: list[FailedJobMeta]) -> list[str]:
     return steps
 
 
+def _case_id(run_dir_name: str, step: str) -> str:
+    digest = hashlib.sha1(step.encode("utf-8")).hexdigest()[:8]
+    return f"{run_dir_name}:{digest}"
+
+
+def _exclusion_reason(
+    meta_workflow_name: str,
+    meta_workflow_path: str | None,
+    failed_step_names: list[str],
+    likely_aggregator: bool,
+) -> Literal["aggregator", "non_ci", "none"]:
+    workflow = " ".join(part for part in (meta_workflow_name, meta_workflow_path or "") if part)
+    if _WORKFLOW_EXCLUDE_RE.search(workflow):
+        return "non_ci"
+    if failed_step_names and all(NON_CI_STEP_RE.search(step) for step in failed_step_names):
+        return "non_ci"
+    if likely_aggregator:
+        return "aggregator"
+    return "none"
+
+
 def build_cases(raw_dir: Path = Path("data/raw"), out: Path = CASES_PATH) -> list[Case]:
     cases: list[Case] = []
     for repo_dir in sorted(path for path in raw_dir.iterdir() if path.is_dir()):
@@ -88,8 +118,10 @@ def build_cases(raw_dir: Path = Path("data/raw"), out: Path = CASES_PATH) -> lis
             parsed_by_job: dict[int, ParsedLog] = {}
             head_sha = meta.head_sha or f"no-sha-{meta.run_id}"
             split = case_split(SEED, meta.repo, head_sha)
+            run_dir_name = run_path.name
+            failed_step_names = _distinct_steps(meta.failed_jobs)
 
-            for step in _distinct_steps(meta.failed_jobs):
+            for step in failed_step_names:
                 jobs = [job for job in meta.failed_jobs if step in job.failed_step_names]
                 if not jobs:
                     continue
@@ -104,22 +136,33 @@ def build_cases(raw_dir: Path = Path("data/raw"), out: Path = CASES_PATH) -> lis
                     )
                     parsed_by_job[representative.id] = parsed
                 baseline = predict(parsed)
+                reason = _exclusion_reason(
+                    meta.workflow_name,
+                    meta.workflow_path,
+                    failed_step_names,
+                    representative.likely_aggregator,
+                )
                 cases.append(
                     Case(
-                        case_id=f"{meta.repo}:{meta.run_id}:{representative.id}:{step}",
+                        case_id=_case_id(run_dir_name, step),
                         repo=meta.repo,
                         run_id=meta.run_id,
+                        run_dir_name=run_dir_name,
                         head_sha=head_sha,
                         created_at=meta.created_at,
                         workflow_name=meta.workflow_name,
+                        html_url=meta.html_url,
                         step=step,
+                        failed_step_names=failed_step_names,
                         job_id=representative.id,
                         job_name=representative.name,
                         sibling_job_ids=[job.id for job in jobs if job.id != representative.id],
                         signature=signature_from_log(parsed),
-                        signature_rank=0,
+                        signature_rank=None,
                         likely_aggregator=representative.likely_aggregator,
                         flake_confirmed=meta.flake_confirmed,
+                        in_benchmark=reason == "none",
+                        exclusion_reason=reason,
                         split=split,
                         seed=SEED,
                         region_start=parsed.region_start,
@@ -133,7 +176,7 @@ def build_cases(raw_dir: Path = Path("data/raw"), out: Path = CASES_PATH) -> lis
                     )
                 )
 
-    by_signature: dict[str, list[Case]] = defaultdict(list)
+    by_signature: dict[str | None, list[Case]] = defaultdict(list)
     for case in cases:
         by_signature[case.signature].append(case)
     for group in by_signature.values():
@@ -161,9 +204,18 @@ def _print_counts(cases: list[Case]) -> None:
         "totals by flake_confirmed:",
         dict(sorted(Counter(case.flake_confirmed for case in cases).items())),
     )
+    print(
+        "totals by in_benchmark:",
+        dict(sorted(Counter(case.in_benchmark for case in cases).items())),
+    )
+    print(
+        "totals by exclusion_reason:",
+        dict(sorted(Counter(case.exclusion_reason for case in cases).items())),
+    )
     signatures: dict[str, set[str]] = defaultdict(set)
     for case in cases:
-        signatures[case.split].add(case.signature)
+        if case.signature is not None:
+            signatures[case.split].add(case.signature)
     overlap = signatures["dev"] & signatures["test"]
     print(f"signatures in both dev and test: {len(overlap)}")
     print(f"cases written: {len(cases)}")

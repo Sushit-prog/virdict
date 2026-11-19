@@ -14,6 +14,7 @@ CLEANUP_PREFIXES = (
     "##[group]Post ",
     "##[finish-job]",
     "Cleaning up workspace",
+    "Cleaning up orphan processes",
     "Post Run",
 )
 
@@ -21,9 +22,26 @@ PYTEST_SUMMARY_RE = re.compile(r"^(FAILED|ERROR)\s+(\S+::\S+)\s+-\s+(.*)$")
 PYTEST_COUNT_RE = re.compile(r"=+\s*\d+\s+failed")
 PYTEST_ANNOTATION_RE = re.compile(r"^##\[error\]\s*\S+::\S+")
 RUFF_RE = re.compile(r"^(.+?):(\d+):(\d+): ([A-Z]+\d+) (.+)$")
+RUFF_SUMMARY_RE = re.compile(r"^Found \d+ errors?\.?$")
 MYPY_RE = re.compile(r"^(.+?):(\d+):(?:\d+:)? error: (.*)$")
-PYRIGHT_RE = re.compile(r"^(.+?):(\d+):(\d+) - error: (.*)$")
+MYPY_SUMMARY_RE = re.compile(r"^Found \d+ errors? in \d+ files?")
+PYRIGHT_RE = re.compile(r"^(.+?):(\d+):(\d+) - (?:error|warning): (.*)$")
 FORMAT_RE = re.compile(r"would reformat (.+)$", re.IGNORECASE)
+ACTIONLINT_RE = re.compile(r"^(.+?):(\d+):(\d+): (.+?) \[([A-Za-z0-9_-]+)\]$")
+PRE_COMMIT_HOOK_RE = re.compile(r"^-\s+hook id:\s*(.+)$")
+PRE_COMMIT_FAIL_RE = re.compile(
+    r"^(?:Failed|Files were modified by this hook)(?:\s*[-:].*)?$", re.IGNORECASE
+)
+RATCHET_FAIL_RE = re.compile(
+    r"^FAIL: (strict-rule totals|basedpyright errors) (?:grew past|exceeded)", re.IGNORECASE
+)
+RATCHET_COUNT_RE = re.compile(
+    r"^\s*([A-Za-z_][A-Za-z0-9_]*): total \d+ over ceiling \d+ \(this change added \d+\)"
+)
+RATCHET_PATH_RE = re.compile(r"^(.+?):(\d+)$")
+TEST_RUNNER_IMPORT_RE = re.compile(r"^ImportError while loading conftest ['\"](.+?)['\"]\.?$")
+TEST_RUNNER_E_RE = re.compile(r"^E\s{3}(.+)$")
+TEST_FRAME_RE = re.compile(r"^(.+?):(\d+): in .+$")
 
 DEPENDENCY_PATTERNS = (
     re.compile(r"^ERROR:"),
@@ -63,6 +81,9 @@ TOOL_PATTERNS = {
     "ruff": re.compile(r"\bruff\b"),
     "mypy": re.compile(r"\bmypy\b"),
     "pyright": re.compile(r"\bpyright\b"),
+    "basedpyright": re.compile(r"\bbasedpyright\b"),
+    "actionlint": re.compile(r"\bactionlint\b"),
+    "pre-commit": re.compile(r"\bpre-commit\b"),
     "uv": re.compile(r"\buv\b"),
     "poetry": re.compile(r"\bpoetry\b"),
     "pip": re.compile(r"\bpip\b"),
@@ -72,15 +93,18 @@ KIND_PRIORITY = {
     "config": 0,
     "infra": 1,
     "dependency": 2,
-    "format": 3,
-    "ruff_lint": 4,
-    "type_error": 5,
-    "pytest_summary": 6,
-    "pytest_count": 7,
-    "pytest_assertion": 8,
-    "pytest_annotation": 9,
-    "traceback": 10,
-    "error_annotation": 11,
+    "ratchet": 3,
+    "lint_format": 4,
+    "format": 4,
+    "ruff_lint": 5,
+    "type_error": 6,
+    "test_failure": 7,
+    "pytest_summary": 8,
+    "pytest_count": 9,
+    "pytest_assertion": 10,
+    "pytest_annotation": 11,
+    "traceback": 12,
+    "error_annotation": 13,
 }
 
 MAX_EVIDENCE = 40
@@ -180,6 +204,24 @@ def _traceback_line(norms: list[str]) -> tuple[int, str] | None:
     return last + 1, norms[last].strip()
 
 
+def _tail_window(norms: list[str], region_end: int, cleanup_index: int) -> list[tuple[int, str]]:
+    end = cleanup_index
+    if region_end:
+        end = min(end, max(0, region_end - 1))
+    tail: list[tuple[int, str]] = []
+    for index in range(end - 1, -1, -1):
+        text = norms[index].strip()
+        if not text:
+            continue
+        if text.startswith(CLEANUP_PREFIXES) or EXIT_CODE_RE.match(text):
+            continue
+        tail.append((index + 1, text[:MAX_TEXT]))
+        if len(tail) == 15:
+            break
+    tail.reverse()
+    return tail
+
+
 def parse_log(text: str) -> ParsedLog:
     lines = text.splitlines()
     norms = [_normalize(line) for line in lines]
@@ -231,6 +273,51 @@ def parse_log(text: str) -> ParsedLog:
     if traceback is not None:
         add("traceback", "generic", traceback[0], traceback[1])
 
+    ratchet_tool: str | None = None
+    for number, line in enumerate(norms, start=1):
+        stripped = line.strip()
+        if stripped.startswith("##[group]Run") or stripped.startswith("##[endgroup]"):
+            ratchet_tool = None
+
+        ratchet_fail = RATCHET_FAIL_RE.match(stripped)
+        if ratchet_fail is not None:
+            name = ratchet_fail.group(1).lower()
+            ratchet_tool = "ruff" if name.startswith("strict-rule") else "basedpyright"
+            add("ratchet", "ratchet", number, stripped)
+            continue
+
+        if ratchet_tool is not None:
+            if RATCHET_COUNT_RE.match(stripped) is not None:
+                kind = "lint_format" if ratchet_tool == "ruff" else "type_error"
+                add(kind, ratchet_tool, number, stripped)
+                continue
+            if RATCHET_PATH_RE.match(stripped) is not None:
+                kind = "lint_format" if ratchet_tool == "ruff" else "type_error"
+                add(kind, ratchet_tool, number, stripped)
+                continue
+            if "BREACHED RULES:" in stripped:
+                add("ratchet", "ratchet", number, stripped)
+                continue
+            if not stripped:
+                ratchet_tool = None
+
+    for number, line in enumerate(norms, start=1):
+        stripped = line.strip()
+        if RUFF_SUMMARY_RE.match(stripped):
+            add("lint_format", "ruff", number, stripped)
+        elif MYPY_SUMMARY_RE.match(stripped):
+            add("type_error", "mypy", number, stripped)
+        elif ACTIONLINT_RE.match(stripped):
+            add("lint_format", "actionlint", number, stripped)
+        elif PRE_COMMIT_HOOK_RE.match(stripped) or PRE_COMMIT_FAIL_RE.match(stripped):
+            add("lint_format", "pre-commit", number, stripped)
+        elif (
+            TEST_RUNNER_IMPORT_RE.match(stripped)
+            or TEST_FRAME_RE.match(stripped)
+            or (TEST_RUNNER_E_RE.match(stripped) and not has_pytest_summary)
+        ):
+            add("test_failure", "pytest", number, stripped)
+
     for number, line in _nontrivial_error_lines(norms):
         if PYTEST_ANNOTATION_RE.match(line):
             continue
@@ -258,6 +345,20 @@ def parse_log(text: str) -> ParsedLog:
                 in_region=region_start <= number <= region_end,
             )
         )
+
+    if not any(item.in_region for item in evidence):
+        for number, text in _tail_window(norms, region_end, _cleanup_index(norms)):
+            digest = hashlib.sha1(f"tail:{number}:{text}".encode()).hexdigest()[:8]
+            evidence.append(
+                Evidence(
+                    id=f"tail-{number}-{digest}",
+                    kind="tail",
+                    line_no=number,
+                    text=text,
+                    tool="unknown",
+                    in_region=True,
+                )
+            )
 
     return ParsedLog(
         region_start=region_start,

@@ -566,6 +566,83 @@ def test_collect_multi_step_job_with_gate_step_is_not_aggregator(
 
 
 @respx.mock
+def test_collect_keeps_issue_classifier_workflow(
+    client: GitHubClient,
+    tmp_path: Path,
+) -> None:
+    run = run_payload(run_id=1, workflow_id=10, name="Issue classifier")
+    respx.get(RUNS_URL).mock(return_value=httpx.Response(200, json=runs_response(run)))
+    respx.get("https://api.github.com/repos/o/r/actions/runs/1/jobs").mock(
+        return_value=httpx.Response(200, json=jobs_response(job_payload(job_id=501)))
+    )
+    respx.get("https://api.github.com/repos/o/r/actions/jobs/501/logs").mock(
+        return_value=httpx.Response(200, content=b"log\n")
+    )
+    respx.get("https://api.github.com/repos/o/r/actions/workflows/10/runs").mock(
+        return_value=httpx.Response(200, json=runs_response())
+    )
+
+    summary = collect_repos(client, ["o/r"], per_repo=1, out=tmp_path, now=DEFAULT_NOW)
+
+    assert summary.repos[0].excluded == 0
+    assert summary.repos[0].runs_saved == 1
+
+
+@respx.mock
+def test_collect_excludes_backport_workflow_by_name(
+    client: GitHubClient,
+    tmp_path: Path,
+) -> None:
+    run = run_payload(run_id=1, workflow_id=10, name="Backport label added")
+    respx.get(RUNS_URL).mock(return_value=httpx.Response(200, json=runs_response(run)))
+    jobs_route = respx.get("https://api.github.com/repos/o/r/actions/runs/1/jobs")
+
+    summary = collect_repos(client, ["o/r"], per_repo=1, out=tmp_path, now=DEFAULT_NOW)
+
+    assert summary.repos[0].excluded == 1
+    assert summary.repos[0].runs_saved == 0
+    assert not jobs_route.called
+
+
+@pytest.mark.parametrize(
+    ("steps", "excluded"),
+    [
+        ([{"name": "Run actions/github-script@v9.0.0", "conclusion": "failure"}], True),
+        (
+            [
+                {"name": "Run actions/github-script@v9.0.0", "conclusion": "failure"},
+                {"name": "Run tests", "conclusion": "failure"},
+            ],
+            False,
+        ),
+    ],
+)
+@respx.mock
+def test_collect_non_ci_step_requires_all_steps(
+    client: GitHubClient,
+    tmp_path: Path,
+    steps: list[dict[str, str]],
+    excluded: bool,
+) -> None:
+    run = run_payload(run_id=1, workflow_id=10, name="CI")
+    respx.get(RUNS_URL).mock(return_value=httpx.Response(200, json=runs_response(run)))
+    respx.get("https://api.github.com/repos/o/r/actions/runs/1/jobs").mock(
+        return_value=httpx.Response(200, json=jobs_response(job_payload(job_id=501, steps=steps)))
+    )
+    respx.get("https://api.github.com/repos/o/r/actions/jobs/501/logs").mock(
+        return_value=httpx.Response(200, content=b"log\n")
+    )
+    respx.get("https://api.github.com/repos/o/r/actions/workflows/10/runs").mock(
+        return_value=httpx.Response(200, json=runs_response())
+    )
+
+    summary = collect_repos(client, ["o/r"], per_repo=1, out=tmp_path, now=DEFAULT_NOW)
+
+    assert summary.repos[0].excluded == int(excluded)
+    assert summary.repos[0].runs_saved == int(not excluded)
+
+
+@respx.mock
 def test_collect_excludes_custom_regex_case_insensitively(
     client: GitHubClient,
     tmp_path: Path,

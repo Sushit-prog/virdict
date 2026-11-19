@@ -1,0 +1,7 @@
+##[group]Run Check strict ruff rules (delta vs merge-base counts)
+base counts fetched from CI artifact strict-rule-counts-abc
+FAIL: strict-rule totals grew past their merge-base count (base bd840c032713):
+  DTZ005: total 216 over ceiling 215 (this change added 1)
+pkg/module.py:558
+##[error]Process completed with exit code 1.
+##[group]Post job cleanup.

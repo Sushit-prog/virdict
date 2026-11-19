@@ -28,8 +28,9 @@ def _culprit_file(evidence: Evidence) -> str | None:
 
 
 def _select(parsed: ParsedLog) -> list[Evidence]:
-    in_region = [item for item in parsed.evidence if item.in_region]
-    return in_region if in_region else list(parsed.evidence)
+    candidates = [item for item in parsed.evidence if item.kind != "tail"]
+    in_region = [item for item in candidates if item.in_region]
+    return in_region if in_region else candidates
 
 
 def predict(parsed: ParsedLog) -> B0Result:
@@ -41,16 +42,32 @@ def predict(parsed: ParsedLog) -> B0Result:
         (LabelName.CONFIG_ERROR, lambda item: item.kind == "config"),
         (LabelName.INFRA_FLAKE, lambda item: item.kind == "infra"),
         (LabelName.DEPENDENCY, lambda item: item.kind == "dependency"),
-        (LabelName.LINT_FORMAT, lambda item: item.kind in {"ruff_lint", "format"}),
-        (LabelName.TYPE_ERROR, lambda item: item.kind == "type_error"),
-        (LabelName.TEST_FAILURE, lambda item: item.kind.startswith("pytest_")),
+        (
+            LabelName.LINT_FORMAT,
+            lambda item: (
+                item.kind in {"ruff_lint", "format", "lint_format"}
+                or (item.kind == "ratchet" and item.tool == "ruff")
+            ),
+        ),
+        (
+            LabelName.TYPE_ERROR,
+            lambda item: (
+                item.kind == "type_error"
+                or (item.kind == "ratchet" and item.tool == "basedpyright")
+            ),
+        ),
+        (
+            LabelName.TEST_FAILURE,
+            lambda item: item.kind.startswith("pytest_") or item.kind == "test_failure",
+        ),
     )
     for label, predicate in rules:
         matches = [item for item in items if predicate(item)]
         if matches:
+            chosen = next((item for item in matches if _culprit_file(item)), matches[0])
             return B0Result(
                 label,
-                _culprit_file(matches[0]),
+                _culprit_file(chosen),
                 [item.id for item in matches],
             )
     return B0Result(LabelName.UNKNOWN, None, [])

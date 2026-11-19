@@ -99,3 +99,61 @@ def test_evidence_is_capped() -> None:
     lines.append("##[group]Post job cleanup.")
     parsed = parse_log("\n".join(lines) + "\n")
     assert len(parsed.evidence) <= 40
+
+
+def test_ratchet_basedpyright_exact_lines() -> None:
+    parsed = parse_log(_load("ratchet_basedpyright.log"))
+    kinds = [(item.kind, item.line_no, item.tool) for item in parsed.evidence]
+    assert ("ratchet", 3, "ratchet") in kinds
+    assert ("type_error", 4, "basedpyright") in kinds
+    assert ("ratchet", 5, "ratchet") in kinds
+    assert "basedpyright" in parsed.tools_detected
+
+
+def test_ratchet_ruff_exact_lines() -> None:
+    parsed = parse_log(_load("ratchet_ruff.log"))
+    kinds = [(item.kind, item.line_no, item.tool) for item in parsed.evidence]
+    assert ("ratchet", 3, "ratchet") in kinds
+    assert ("lint_format", 4, "ruff") in kinds
+    assert ("lint_format", 5, "ruff") in kinds
+
+
+def test_actionlint_exact_line() -> None:
+    parsed = parse_log(_load("actionlint.log"))
+    item = next(item for item in parsed.evidence if item.kind == "lint_format")
+    assert item.line_no == 3
+    assert item.tool == "actionlint"
+    assert "actionlint" in parsed.tools_detected
+
+
+def test_pre_commit_exact_lines() -> None:
+    parsed = parse_log(_load("pre_commit.log"))
+    items = [item for item in parsed.evidence if item.tool == "pre-commit"]
+    assert [item.line_no for item in items] == [3, 4]
+    assert all(item.kind == "lint_format" for item in items)
+
+
+def test_ruff_and_mypy_summaries_are_detected() -> None:
+    ruff = parse_log(_load("ruff.log"))
+    mypy = parse_log(_load("mypy.log"))
+    assert any(item.line_no == 3 and item.tool == "ruff" for item in ruff.evidence)
+    assert any(item.line_no == 3 and item.tool == "mypy" for item in mypy.evidence)
+
+
+def test_run_tests_import_error_exact_lines() -> None:
+    parsed = parse_log(_load("run_tests_import_error.log"))
+    items = [item for item in parsed.evidence if item.kind == "test_failure"]
+    assert [item.line_no for item in items] == [2, 3, 5]
+    assert all(item.tool == "pytest" for item in items)
+
+
+def test_tail_fallback_uses_15_original_line_numbers() -> None:
+    lines = ["##[group]Run unknown tool"]
+    lines.extend(f"noise line {number}" for number in range(1, 20))
+    lines.append("##[error]Process completed with exit code 1.")
+    lines.append("##[group]Post job cleanup.")
+    parsed = parse_log("\n".join(lines) + "\n")
+    tail = [item for item in parsed.evidence if item.kind == "tail"]
+    assert len(tail) == 15
+    assert [item.line_no for item in tail] == list(range(6, 21))
+    assert all(item.tool == "unknown" for item in tail)

@@ -21,6 +21,36 @@ def run_dir(out: Path, repo: str, run_id: int, *, attempt: int | None = None) ->
     return repo_dir(out, repo) / name
 
 
+def discover_run_dirs(raw_root: Path, repo: str, run_id: int) -> list[Path]:
+    base = repo_dir(raw_root, repo)
+    dirs: list[Path] = []
+    direct = base / str(run_id)
+    if direct.is_dir():
+        dirs.append(direct)
+    dirs.extend(sorted(base.glob(f"{run_id}_*")))
+    return dirs
+
+
+def log_path(
+    raw_root: Path,
+    repo: str,
+    run_id: int,
+    job_id: int,
+    *,
+    run_dir_name: str | None = None,
+) -> Path:
+    base = repo_dir(raw_root, repo)
+    if run_dir_name is not None:
+        return base / run_dir_name / f"job_{job_id}.log"
+    dirs = discover_run_dirs(raw_root, repo, run_id)
+    for directory in dirs:
+        candidate = directory / f"job_{job_id}.log"
+        if candidate.exists():
+            return candidate
+    fallback = dirs[0] if dirs else base / str(run_id)
+    return fallback / f"job_{job_id}.log"
+
+
 def read_run_meta(path: Path) -> RunMeta | None:
     try:
         raw = json.loads((path / "meta.json").read_text(encoding="utf-8"))

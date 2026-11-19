@@ -1,0 +1,7 @@
+##[group]Run tests
+ImportError while loading conftest '/home/runner/work/project/tests/conftest.py'.
+tests/conftest.py:24: in <module>
+    from models import BaseModel
+E   NameError: name 'BaseModel' is not defined
+##[error]Process completed with exit code 4.
+##[group]Post job cleanup.

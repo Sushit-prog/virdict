@@ -1,19 +1,25 @@
 from __future__ import annotations
 
+import sys
 from collections import Counter
 from pathlib import Path
 
 from citriage.cases import Case, load_cases
+from citriage.storage import log_path
 
 RAW = Path("data/raw")
 REPORT = Path("reports/parse_coverage.md")
 
 
 def _log_path(case: Case) -> Path | None:
-    for path in RAW.rglob(f"job_{case.job_id}.log"):
-        if path.parent.name == str(case.run_id) or path.parent.name.startswith(f"{case.run_id}_a"):
-            return path
-    return None
+    path = log_path(
+        RAW,
+        case.repo,
+        case.run_id,
+        case.job_id,
+        run_dir_name=case.run_dir_name or None,
+    )
+    return path if path.exists() else None
 
 
 def _pytest_excerpts(cases: list[Case]) -> list[tuple[Case, str, list[str]]]:
@@ -38,41 +44,72 @@ def _pytest_excerpts(cases: list[Case]) -> list[tuple[Case, str, list[str]]]:
 
 
 def main() -> int:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     cases = load_cases()
-    zeros = [case for case in cases if not case.evidence]
-    kinds = Counter(item.kind for case in cases for item in case.evidence)
-    labels = Counter(case.b0_label.value for case in cases)
-    excerpts = _pytest_excerpts(cases)
+    bench = [case for case in cases if case.in_benchmark]
+    zeros_excluding_tail = [
+        case for case in bench if not any(item.kind != "tail" for item in case.evidence)
+    ]
+    zeros_including_tail = [case for case in bench if not case.evidence]
+    kinds_all = Counter(item.kind for case in cases for item in case.evidence)
+    kinds_bench = Counter(item.kind for case in bench for item in case.evidence)
+    labels_all = Counter(case.b0_label.value for case in cases)
+    labels_bench = Counter(case.b0_label.value for case in bench)
+    per_repo_split = Counter((case.repo, case.split) for case in cases)
+    per_repo_split_bench = Counter((case.repo, case.split) for case in bench)
+    excerpts = _pytest_excerpts(bench)
+
+    rate_excluding = len(zeros_excluding_tail) / len(bench) if bench else 0.0
+    rate_including = len(zeros_including_tail) / len(bench) if bench else 0.0
 
     lines = [
         "# Parse coverage",
         "",
         f"- Cases: {len(cases)}",
-        f"- Cases with zero evidence: {len(zeros)}",
-        f"- Distinct evidence kinds: {len(kinds)}",
+        f"- In-benchmark cases: {len(bench)}",
+        (
+            "- In-benchmark zero evidence (excluding tail): "
+            f"{len(zeros_excluding_tail)}/{len(bench)} ({rate_excluding:.1%})"
+        ),
+        (
+            "- In-benchmark zero evidence (including tail): "
+            f"{len(zeros_including_tail)}/{len(bench)} ({rate_including:.1%})"
+        ),
+        f"- Distinct evidence kinds: {len(kinds_all)}",
         "",
-        "## Evidence kinds",
+        "## Cases by repo and split",
         "",
-        "| kind | count |",
-        "| --- | ---: |",
+        "| repo | split | all | in_benchmark |",
+        "| --- | --- | ---: | ---: |",
     ]
-    lines.extend(f"| {kind} | {count} |" for kind, count in kinds.most_common())
+    for (repo, split), count in sorted(per_repo_split.items()):
+        lines.append(f"| {repo} | {split} | {count} | {per_repo_split_bench[(repo, split)]} |")
 
-    lines.extend(["", "## B0 labels", "", "| label | count |", "| --- | ---: |"])
-    lines.extend(f"| {label} | {count} |" for label, count in labels.most_common())
+    lines.extend(["", "## Evidence kinds (all cases)", "", "| kind | count |", "| --- | ---: |"])
+    lines.extend(f"| {kind} | {count} |" for kind, count in kinds_all.most_common())
+
+    lines.extend(["", "## Evidence kinds (in_benchmark)", "", "| kind | count |", "| --- | ---: |"])
+    lines.extend(f"| {kind} | {count} |" for kind, count in kinds_bench.most_common())
+
+    lines.extend(["", "## B0 labels (in_benchmark)", "", "| label | count |", "| --- | ---: |"])
+    lines.extend(f"| {label} | {count} |" for label, count in labels_bench.most_common())
+
+    lines.extend(["", "## B0 labels (all)", "", "| label | count |", "| --- | ---: |"])
+    lines.extend(f"| {label} | {count} |" for label, count in labels_all.most_common())
 
     lines.extend(
         [
             "",
-            "## Zero-evidence cases (first 15)",
+            "## Zero-evidence in_benchmark cases (excluding tail, first 15)",
             "",
-            "| repo | run_id | job | step |",
-            "| --- | ---: | --- | --- |",
+            "| case_id | repo | run_id | job | step |",
+            "| --- | --- | ---: | --- | --- |",
         ]
     )
-    for case in zeros[:15]:
+    for case in zeros_excluding_tail[:15]:
         lines.append(
-            f"| {case.repo} | {case.run_id} | {case.job_name} | {case.step.replace('|', '\\|')} |"
+            f"| {case.case_id} | {case.repo} | {case.run_id} | {case.job_name} | "
+            f"{case.step.replace('|', '\\|')} |"
         )
 
     lines.extend(["", "## Raw pytest excerpts", ""])
@@ -93,12 +130,24 @@ def main() -> int:
     REPORT.parent.mkdir(parents=True, exist_ok=True)
     REPORT.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
 
-    print(f"cases={len(cases)} zero_evidence={len(zeros)}")
-    print("evidence kinds:", dict(kinds.most_common()))
-    print("B0 labels:", dict(labels.most_common()))
-    print("zero-evidence cases (first 15):")
-    for case in zeros[:15]:
-        print(f"  {case.repo} | {case.run_id} | {case.job_name} | {case.step}")
+    print(f"cases={len(cases)} in_benchmark={len(bench)}")
+    print(
+        "zero_evidence_excluding_tail="
+        f"{len(zeros_excluding_tail)}/{len(bench)} ({rate_excluding:.1%})"
+    )
+    print(
+        "zero_evidence_including_tail="
+        f"{len(zeros_including_tail)}/{len(bench)} ({rate_including:.1%})"
+    )
+    per_repo_split_text = {
+        f"{repo}/{split}": count for (repo, split), count in sorted(per_repo_split.items())
+    }
+    print("per repo/split:", per_repo_split_text)
+    print("evidence kinds:", dict(kinds_all.most_common()))
+    print("B0 labels in_benchmark:", dict(labels_bench.most_common()))
+    print("zero-evidence in_benchmark cases (excluding tail, first 15):")
+    for case in zeros_excluding_tail[:15]:
+        print(f"  {case.case_id} | {case.repo} | {case.run_id} | {case.job_name} | {case.step}")
     print(f"wrote {REPORT}")
     return 0
 
