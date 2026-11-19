@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Annotated
 
 import typer
+from dotenv import load_dotenv
 
 from citriage.collect import collect_repos
 from citriage.errors import AuthenticationError, CitriageError, MissingTokenError
@@ -14,9 +15,17 @@ from citriage.summary import render_summary
 app = typer.Typer(add_completion=False, no_args_is_help=True)
 
 
+def _load_env() -> None:
+    load_dotenv(Path.cwd() / ".env", override=False)
+
+
 @app.callback()
 def _callback() -> None:
-    pass
+    _load_env()
+
+
+def _token() -> str:
+    return os.environ.get("GITHUB_TOKEN", "").strip()
 
 
 def _normalize_repos(raw: list[str]) -> list[str]:
@@ -53,10 +62,10 @@ def collect(
         typer.Option("--out", help="Output directory for raw snapshots."),
     ] = Path("data/raw"),
 ) -> None:
-    token = os.environ.get("GITHUB_TOKEN", "").strip()
+    token = _token()
     if not token:
         typer.secho(
-            "GITHUB_TOKEN is not set. Export a read-only token and retry.",
+            "GITHUB_TOKEN is not set. Set it in the environment or in .env, then retry.",
             err=True,
             fg=typer.colors.RED,
         )

@@ -1,4 +1,4 @@
-.venv/
+﻿.venv/
 __pycache__/
 *.py[cod]
 .pytest_cache/
@@ -10,4 +10,5 @@ build/
 .qodo/
 .env
 .env.*
+!.env.example
 data/raw/
