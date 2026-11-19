@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 from datetime import timedelta
 from pathlib import Path
 
@@ -8,6 +9,7 @@ import pytest
 from citriage.bench.report import write_bench_reports
 from citriage.bench.runner import (
     BenchError,
+    SystemRunMetadata,
     run_bench,
     select_gold,
     split_guard,
@@ -132,6 +134,12 @@ def test_run_bench_scores_and_writes_reports(tmp_path: Path) -> None:
         raw_root=tmp_path / "raw",
         seed=7,
         resamples=10,
+        metadata=SystemRunMetadata(
+            model="fake-model",
+            model_digest="fake-digest",
+            num_ctx=2048,
+            prompt_version="b1-v1",
+        ),
     )
     csv_path, markdown_path = write_bench_reports(result, tmp_path / "reports")
 
@@ -147,3 +155,18 @@ def test_run_bench_scores_and_writes_reports(tmp_path: Path) -> None:
     assert "N labeled: 1" in markdown
     assert "hallucinated_citation_rate" in markdown
     assert "citation_gold_agreement" in markdown
+    assert "model: fake-model" in markdown
+    assert "model digest: fake-digest" in markdown
+    assert "num_ctx: 2048" in markdown
+    assert "prompt version: b1-v1" in markdown
+    assert "latency p50 ms (live)" in markdown
+    assert "cache-hit rate" in markdown
+
+    with csv_path.open(encoding="utf-8", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    assert rows[0]["model"] == "fake-model"
+    assert rows[0]["prompt_version"] == "b1-v1"
+    assert "tokens_in" in rows[0]
+    assert "latency_p95_ms" in rows[0]
+    assert "invalid_output_rate" in rows[0]
+    assert "retry_rate" in rows[0]

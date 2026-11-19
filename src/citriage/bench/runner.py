@@ -31,6 +31,14 @@ class BenchError(ValueError):
 
 
 @dataclass(frozen=True)
+class SystemRunMetadata:
+    model: str = ""
+    model_digest: str = ""
+    num_ctx: int | None = None
+    prompt_version: str = ""
+
+
+@dataclass(frozen=True)
 class GoldSelection:
     pairs: tuple[tuple[Case, Label], ...]
     candidate_cases: int
@@ -62,6 +70,7 @@ class BenchResult:
     rows: tuple[CaseScore, ...]
     overall: AggregateMetrics
     per_repo: dict[str, AggregateMetrics]
+    metadata: SystemRunMetadata = SystemRunMetadata()
 
 
 def split_guard(split: Split, confirm_test: bool, frozen_path: Path = FROZEN_PATH) -> str | None:
@@ -147,6 +156,7 @@ def _aggregate_rows(
         [row.prediction.label for row in rows],
         [row.evidence for row in rows],
         [row.culprit_hit for row in rows],
+        predictions=[row.prediction for row in rows],
         seed=seed,
         resamples=resamples,
     )
@@ -165,6 +175,7 @@ def run_bench(
     frozen_path: Path = FROZEN_PATH,
     seed: int = BENCH_SEED,
     resamples: int = BOOTSTRAP_RESAMPLES,
+    metadata: SystemRunMetadata | None = None,
 ) -> BenchResult:
     split_guard(split, confirm_test, frozen_path)
     cases = load_cases(cases_path)
@@ -221,6 +232,7 @@ def run_bench(
         rows=tuple(rows),
         overall=_aggregate_rows(rows, seed=seed, resamples=resamples),
         per_repo=per_repo,
+        metadata=metadata or SystemRunMetadata(),
     )
 
 
@@ -230,6 +242,7 @@ __all__ = [
     "CaseScore",
     "GoldSelection",
     "Split",
+    "SystemRunMetadata",
     "split_guard",
     "select_gold",
     "run_bench",

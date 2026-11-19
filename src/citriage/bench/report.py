@@ -23,9 +23,6 @@ def _format_rate(numerator: int, denominator: int) -> str:
 def render_markdown(result: BenchResult) -> str:
     overall = result.overall
     classification = overall.classification
-    raw_tokens_in = sum(row.prediction.raw_tokens_in for row in result.rows)
-    raw_tokens_out = sum(row.prediction.raw_tokens_out for row in result.rows)
-    latency_ms = sum(row.prediction.latency_ms for row in result.rows)
     lines = [
         f"# Bench report: {result.system} {result.split}",
         "",
@@ -36,6 +33,10 @@ def render_markdown(result: BenchResult) -> str:
         f"- system: {result.system}",
         f"- split: {result.split}",
         f"- labeler: {result.labeler}",
+        f"- model: {result.metadata.model or 'n/a'}",
+        f"- model digest: {result.metadata.model_digest or 'n/a'}",
+        f"- num_ctx: {result.metadata.num_ctx if result.metadata.num_ctx is not None else 'n/a'}",
+        f"- prompt version: {result.metadata.prompt_version or 'n/a'}",
         f"- bootstrap: {result.resamples} resamples, 95% percentile intervals",
         f"- candidate in-benchmark cases: {result.candidate_cases}",
         f"- skipped without current label: {result.skipped_no_label}",
@@ -58,9 +59,18 @@ def render_markdown(result: BenchResult) -> str:
         f"| unknown rate | {overall.unknown_rate:.3f} ({overall.unknown_count}/{overall.n}) |",
         f"| confident-wrong rate | {overall.confident_wrong_rate:.3f} "
         f"({overall.confident_wrong_count}/{overall.n}) |",
-        f"| raw tokens in | {raw_tokens_in} |",
-        f"| raw tokens out | {raw_tokens_out} |",
-        f"| latency ms | {latency_ms:.3f} |",
+        f"| tokens in | {overall.tokens_in} |",
+        f"| tokens out | {overall.tokens_out} |",
+        f"| latency p50 ms (live) | {_fmt(overall.latency_p50_ms)} |",
+        f"| latency p95 ms (live) | {_fmt(overall.latency_p95_ms)} |",
+        f"| live calls | {overall.live_call_count} |",
+        f"| cache-hit rate | {_fmt(overall.cache_hit_rate)} "
+        f"({overall.cache_hit_count}/{overall.n}) |",
+        f"| invalid-output rate | {overall.invalid_output_rate:.3f} "
+        f"({overall.invalid_output_count}/{overall.n}) |",
+        f"| retry rate | {overall.retry_rate:.3f} ({overall.retry_count}/{overall.n}) |",
+        f"| prompt-truncated rate | {_fmt(overall.prompt_truncated_rate)} "
+        f"({overall.prompt_truncated_count}/{overall.n}) |",
         "",
         "## Per-label",
         "",
@@ -113,6 +123,10 @@ def _write_csv(result: BenchResult, path: Path) -> None:
         "system",
         "split",
         "labeler",
+        "model",
+        "model_digest",
+        "num_ctx",
+        "prompt_version",
         "case_id",
         "repo",
         "gold",
@@ -129,6 +143,20 @@ def _write_csv(result: BenchResult, path: Path) -> None:
         "raw_tokens_in",
         "raw_tokens_out",
         "latency_ms",
+        "tokens_in",
+        "tokens_out",
+        "latency_p50_ms",
+        "latency_p95_ms",
+        "live_call_count",
+        "cache_hit_count",
+        "cache_hit_rate",
+        "invalid_output",
+        "invalid_output_rate",
+        "retry_count",
+        "retry_rate",
+        "prompt_truncated",
+        "prompt_truncated_rate",
+        "cited_lines",
     ]
     with path.open("w", encoding="utf-8", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
@@ -144,6 +172,10 @@ def _write_csv(result: BenchResult, path: Path) -> None:
                     "system": result.system,
                     "split": result.split,
                     "labeler": result.labeler,
+                    "model": result.metadata.model,
+                    "model_digest": result.metadata.model_digest,
+                    "num_ctx": result.metadata.num_ctx or "",
+                    "prompt_version": result.metadata.prompt_version,
                     "case_id": row.case.case_id,
                     "repo": row.case.repo,
                     "gold": row.gold.label.value,
@@ -162,6 +194,28 @@ def _write_csv(result: BenchResult, path: Path) -> None:
                     "raw_tokens_in": row.prediction.raw_tokens_in,
                     "raw_tokens_out": row.prediction.raw_tokens_out,
                     "latency_ms": f"{row.prediction.latency_ms:.3f}",
+                    "tokens_in": row.prediction.raw_tokens_in,
+                    "tokens_out": row.prediction.raw_tokens_out,
+                    "latency_p50_ms": ""
+                    if result.overall.latency_p50_ms is None
+                    else f"{result.overall.latency_p50_ms:.3f}",
+                    "latency_p95_ms": ""
+                    if result.overall.latency_p95_ms is None
+                    else f"{result.overall.latency_p95_ms:.3f}",
+                    "live_call_count": result.overall.live_call_count,
+                    "cache_hit_count": result.overall.cache_hit_count,
+                    "cache_hit_rate": ""
+                    if result.overall.cache_hit_rate is None
+                    else f"{result.overall.cache_hit_rate:.3f}",
+                    "invalid_output": str(row.prediction.invalid_output),
+                    "invalid_output_rate": f"{result.overall.invalid_output_rate:.3f}",
+                    "retry_count": row.prediction.retry_count,
+                    "retry_rate": f"{result.overall.retry_rate:.3f}",
+                    "prompt_truncated": str(row.prediction.prompt_truncated),
+                    "prompt_truncated_rate": ""
+                    if result.overall.prompt_truncated_rate is None
+                    else f"{result.overall.prompt_truncated_rate:.3f}",
+                    "cited_lines": "|".join(str(line) for line in row.prediction.cited_lines),
                 }
             )
 

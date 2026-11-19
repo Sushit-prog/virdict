@@ -125,3 +125,49 @@ def test_culprit_match_normalizes_paths_and_respects_missing_gold() -> None:
     assert culprit_match("src/x.py", "./src\\x.py") is True
     assert culprit_match("src/x.py", "src/y.py") is False
     assert culprit_match(None, "src/x.py") is None
+
+
+def test_line_citations_outside_shown_window_are_hallucinated() -> None:
+    case = bench_case()
+    gold = bench_label(evidence_lines=[10])
+    prediction = bench_prediction(
+        cited_lines=(10, 999),
+        shown_line_numbers=(9, 10, 11),
+    )
+
+    metrics = score_evidence(case, gold, prediction)
+
+    assert metrics.hallucinated_citations == 1
+    assert metrics.total_citations == 2
+    assert metrics.citation_gold_hits == 1
+    assert metrics.citation_gold_lines == 2
+
+
+def test_aggregate_uses_live_calls_for_latency_percentiles() -> None:
+    predictions = [
+        bench_prediction(raw_tokens_in=10, latency_ms=10.0),
+        bench_prediction(raw_tokens_in=20, latency_ms=20.0, cached=True),
+        bench_prediction(raw_tokens_in=30, latency_ms=30.0),
+        bench_prediction(
+            raw_tokens_in=40,
+            latency_ms=40.0,
+            invalid_output=True,
+            retry_count=2,
+            prompt_truncated=True,
+        ),
+    ]
+    labels = [LabelName.TEST_FAILURE] * 4
+    evidence = [EvidenceCaseMetrics(0, 0, 0, 0, None)] * 4
+
+    metrics = aggregate_metrics(labels, labels, evidence, [None] * 4, predictions=predictions)
+
+    assert metrics.tokens_in == 100
+    assert metrics.tokens_out == 0
+    assert metrics.live_call_count == 3
+    assert metrics.cache_hit_count == 1
+    assert metrics.cache_hit_rate == pytest.approx(0.25)
+    assert metrics.latency_p50_ms == pytest.approx(30.0)
+    assert metrics.latency_p95_ms == pytest.approx(40.0)
+    assert metrics.invalid_output_rate == pytest.approx(0.25)
+    assert metrics.retry_rate == pytest.approx(0.5)
+    assert metrics.prompt_truncated_rate == pytest.approx(0.25)

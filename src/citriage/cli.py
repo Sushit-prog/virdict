@@ -10,14 +10,20 @@ from dotenv import load_dotenv
 
 from citriage.bench.metrics import BENCH_SEED, BOOTSTRAP_RESAMPLES
 from citriage.bench.report import DEFAULT_REPORT_DIR, write_bench_reports
-from citriage.bench.runner import BenchError, Split, run_bench, split_guard
-from citriage.bench.systems import get_system
+from citriage.bench.runner import BenchError, Split, SystemRunMetadata, run_bench, split_guard
+from citriage.bench.systems import build_system
 from citriage.cases import CASES_PATH, build_cases
 from citriage.collect import collect_repos
 from citriage.errors import AuthenticationError, CitriageError, MissingTokenError
 from citriage.github.client import GitHubClient
 from citriage.label_cli import label_app
 from citriage.labels import LABELS_PATH
+from citriage.llm.provider import (
+    DEFAULT_CACHE_DB,
+    DEFAULT_NUM_CTX,
+    DEFAULT_TIMEOUT_SECONDS,
+    LLMError,
+)
 from citriage.summary import render_summary
 
 app = typer.Typer(add_completion=False, no_args_is_help=True)
@@ -175,6 +181,15 @@ def bench(
     report_dir: Annotated[Path, typer.Option("--report-dir")] = DEFAULT_REPORT_DIR,
     seed: Annotated[int, typer.Option("--seed")] = BENCH_SEED,
     resamples: Annotated[int, typer.Option("--resamples", min=1)] = BOOTSTRAP_RESAMPLES,
+    model: Annotated[str, typer.Option("--model", help="LLM model for system b1.")] = (
+        "qwen2.5-coder:1.5b"
+    ),
+    num_ctx: Annotated[int, typer.Option("--num-ctx", min=1)] = DEFAULT_NUM_CTX,
+    no_cache: Annotated[bool, typer.Option("--no-cache", help="Bypass the LLM response cache.")] = (
+        False
+    ),
+    cache_db: Annotated[Path, typer.Option("--cache-db")] = DEFAULT_CACHE_DB,
+    llm_timeout: Annotated[float, typer.Option("--llm-timeout", min=1.0)] = DEFAULT_TIMEOUT_SECONDS,
 ) -> None:
     if split not in ("dev", "test"):
         typer.secho("--split must be dev or test", err=True, fg=typer.colors.RED)
@@ -188,14 +203,27 @@ def bench(
     if warning is not None:
         typer.secho(warning, err=True, fg=typer.colors.YELLOW)
 
-    try:
-        predictor = get_system(system)
-    except KeyError as exc:
-        typer.secho(str(exc), err=True, fg=typer.colors.RED)
-        raise typer.Exit(2) from exc
-
     resolved_labeler = labeler or os.environ.get("LABELER", "").strip() or "labeler"
+    metadata = SystemRunMetadata()
     try:
+        if system == "b1":
+            predictor = build_system(
+                system,
+                model=model,
+                raw_root=raw,
+                cache_db=cache_db,
+                num_ctx=num_ctx,
+                use_cache=not no_cache,
+                llm_timeout=llm_timeout,
+            )
+            metadata = SystemRunMetadata(
+                model=getattr(predictor, "model", model),
+                model_digest=getattr(predictor, "model_digest", ""),
+                num_ctx=getattr(predictor, "num_ctx", num_ctx),
+                prompt_version=getattr(predictor, "prompt_version", ""),
+            )
+        else:
+            predictor = build_system(system)
         result = run_bench(
             system=predictor,
             system_name=system,
@@ -207,15 +235,26 @@ def bench(
             confirm_test=confirm_test,
             seed=seed,
             resamples=resamples,
+            metadata=metadata,
         )
+    except KeyError as exc:
+        typer.secho(str(exc), err=True, fg=typer.colors.RED)
+        raise typer.Exit(2) from exc
     except BenchError as exc:
         typer.secho(str(exc), err=True, fg=typer.colors.RED)
         raise typer.Exit(2) from exc
-    except ValueError as exc:
+    except (LLMError, ValueError) as exc:
         typer.secho(str(exc), err=True, fg=typer.colors.RED)
         raise typer.Exit(1) from exc
 
     print(f"N labeled: {result.n_labeled}")
+    if result.overall.prompt_truncated_rate:
+        typer.secho(
+            "WARNING: prompt truncation detected in "
+            f"{result.overall.prompt_truncated_count}/{result.n_labeled} predictions",
+            err=True,
+            fg=typer.colors.YELLOW,
+        )
     csv_path, markdown_path = write_bench_reports(result, report_dir)
     print(f"wrote {csv_path}")
     print(f"wrote {markdown_path}")

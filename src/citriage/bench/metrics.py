@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import random
 from collections import Counter
 from collections.abc import Callable, Sequence
@@ -80,10 +81,31 @@ class AggregateMetrics:
     unknown_rate: float
     confident_wrong_count: int
     confident_wrong_rate: float
+    tokens_in: int
+    tokens_out: int
+    latency_p50_ms: float | None
+    latency_p95_ms: float | None
+    live_call_count: int
+    cache_hit_count: int
+    cache_hit_rate: float | None
+    invalid_output_count: int
+    invalid_output_rate: float
+    retry_count: int
+    retry_rate: float
+    prompt_truncated_count: int
+    prompt_truncated_rate: float | None
 
 
 def _mean(values: Sequence[float]) -> float:
     return sum(values) / len(values) if values else 0.0
+
+
+def _percentile(values: Sequence[float], quantile: float) -> float | None:
+    if not values:
+        return None
+    ordered = sorted(values)
+    index = max(0, min(len(ordered) - 1, math.ceil(quantile * len(ordered)) - 1))
+    return ordered[index]
 
 
 def _label_key(label: LabelName) -> str:
@@ -207,32 +229,49 @@ def score_evidence(
     prediction: Prediction,
     raw_lines: Sequence[str] | None = None,
 ) -> EvidenceCaseMetrics:
-    cited_evidence_ids = prediction.cited_evidence_ids
-    parsed = {item.id: item for item in case.evidence}
     gold_lines = set(gold.evidence_lines)
     hallucinated = 0
     citation_hits = 0
     citation_lines = 0
-    for citation_id in cited_evidence_ids:
-        item = parsed.get(citation_id)
-        if item is None:
-            hallucinated += 1
-            continue
-        raw_line = _raw_line(raw_lines, item.line_no)
-        if raw_line is not None and not _quote_matches(item.text, raw_line):
-            hallucinated += 1
-        if gold_lines:
-            citation_lines += 1
-            if _near_any(item.line_no, gold_lines):
-                citation_hits += 1
+
+    if prediction.cited_lines:
+        shown_lines = set(prediction.shown_line_numbers)
+        citations: Sequence[int] = prediction.cited_lines
+        for line in citations:
+            if line not in shown_lines:
+                hallucinated += 1
+            if gold_lines:
+                citation_lines += 1
+                if _near_any(line, gold_lines):
+                    citation_hits += 1
+    else:
+        parsed = {item.id: item for item in case.evidence}
+        for citation_id in prediction.cited_evidence_ids:
+            item = parsed.get(citation_id)
+            if item is None:
+                hallucinated += 1
+                continue
+            raw_line = _raw_line(raw_lines, item.line_no)
+            if raw_line is not None and not _quote_matches(item.text, raw_line):
+                hallucinated += 1
+            if gold_lines:
+                citation_lines += 1
+                if _near_any(item.line_no, gold_lines):
+                    citation_hits += 1
+
     ceiling: bool | None = None
     if gold_lines:
         ceiling = any(
             item.kind != "tail" and _near_any(item.line_no, gold_lines) for item in case.evidence
         )
+    total_citations = (
+        len(prediction.cited_lines)
+        if prediction.cited_lines
+        else len(prediction.cited_evidence_ids)
+    )
     return EvidenceCaseMetrics(
         hallucinated_citations=hallucinated,
-        total_citations=len(cited_evidence_ids),
+        total_citations=total_citations,
         citation_gold_hits=citation_hits,
         citation_gold_lines=citation_lines,
         evidence_recall_ceiling=ceiling,
@@ -258,6 +297,7 @@ def aggregate_metrics(
     evidence: Sequence[EvidenceCaseMetrics],
     culprits: Sequence[bool | None],
     *,
+    predictions: Sequence[Prediction] | None = None,
     resamples: int = BOOTSTRAP_RESAMPLES,
     seed: int = BENCH_SEED,
 ) -> AggregateMetrics:
@@ -275,6 +315,35 @@ def aggregate_metrics(
     confident_wrong_count = sum(
         g != p and p != LabelName.UNKNOWN for g, p in zip(gold, predicted, strict=True)
     )
+    if predictions is None:
+        tokens_in = 0
+        tokens_out = 0
+        latency_p50_ms = None
+        latency_p95_ms = None
+        live_call_count = 0
+        cache_hit_count = 0
+        cache_hit_rate = None
+        invalid_output_count = 0
+        invalid_output_rate = 0.0
+        retry_count = 0
+        retry_rate = 0.0
+        prompt_truncated_count = 0
+        prompt_truncated_rate = None
+    else:
+        tokens_in = sum(item.raw_tokens_in for item in predictions)
+        tokens_out = sum(item.raw_tokens_out for item in predictions)
+        live_latencies = [item.latency_ms for item in predictions if not item.cached]
+        latency_p50_ms = _percentile(live_latencies, 0.5)
+        latency_p95_ms = _percentile(live_latencies, 0.95)
+        cache_hit_count = sum(item.cached for item in predictions)
+        live_call_count = len(predictions) - cache_hit_count
+        cache_hit_rate = cache_hit_count / len(predictions) if predictions else None
+        invalid_output_count = sum(item.invalid_output for item in predictions)
+        invalid_output_rate = invalid_output_count / len(predictions) if predictions else 0.0
+        retry_count = sum(item.retry_count for item in predictions)
+        retry_rate = retry_count / len(predictions) if predictions else 0.0
+        prompt_truncated_count = sum(item.prompt_truncated for item in predictions)
+        prompt_truncated_rate = prompt_truncated_count / len(predictions) if predictions else None
     return AggregateMetrics(
         n=len(gold),
         classification=classification,
@@ -296,6 +365,19 @@ def aggregate_metrics(
         unknown_rate=unknown_count / len(gold) if gold else 0.0,
         confident_wrong_count=confident_wrong_count,
         confident_wrong_rate=confident_wrong_count / len(gold) if gold else 0.0,
+        tokens_in=tokens_in,
+        tokens_out=tokens_out,
+        latency_p50_ms=latency_p50_ms,
+        latency_p95_ms=latency_p95_ms,
+        live_call_count=live_call_count,
+        cache_hit_count=cache_hit_count,
+        cache_hit_rate=cache_hit_rate,
+        invalid_output_count=invalid_output_count,
+        invalid_output_rate=invalid_output_rate,
+        retry_count=retry_count,
+        retry_rate=retry_rate,
+        prompt_truncated_count=prompt_truncated_count,
+        prompt_truncated_rate=prompt_truncated_rate,
     )
 
 

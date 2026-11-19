@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Protocol
+from collections.abc import Callable
+from typing import Any, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -19,6 +20,16 @@ class Prediction(BaseModel):
     raw_tokens_in: int = 0
     raw_tokens_out: int = 0
     latency_ms: float = 0.0
+    model: str = ""
+    model_digest: str = ""
+    num_ctx: int | None = None
+    prompt_version: str = ""
+    cached: bool = False
+    invalid_output: bool = False
+    retry_count: int = 0
+    prompt_truncated: bool = False
+    cited_lines: tuple[int, ...] = ()
+    shown_line_numbers: tuple[int, ...] = ()
 
 
 class System(Protocol):
@@ -43,12 +54,24 @@ class B0System:
 
 
 _SYSTEMS: dict[str, System] = {}
+_FACTORIES: dict[str, Callable[..., System]] = {}
 
 
-def register_system(name: str, system: System) -> None:
-    if not name or name in _SYSTEMS:
+def register_system(name: str, system: System, *, replace: bool = False) -> None:
+    if not name or (name in _SYSTEMS and not replace):
         raise ValueError(f"invalid or duplicate system name: {name!r}")
     _SYSTEMS[name] = system
+
+
+def register_system_factory(
+    name: str,
+    factory: Callable[..., System],
+    *,
+    replace: bool = False,
+) -> None:
+    if not name or (name in _FACTORIES and not replace):
+        raise ValueError(f"invalid or duplicate system factory: {name!r}")
+    _FACTORIES[name] = factory
 
 
 def get_system(name: str) -> System:
@@ -58,8 +81,14 @@ def get_system(name: str) -> System:
         raise KeyError(f"unknown system {name!r}; available: {', '.join(system_names())}") from exc
 
 
+def build_system(name: str, **options: Any) -> System:
+    if name in _FACTORIES:
+        return _FACTORIES[name](**options)
+    return get_system(name)
+
+
 def system_names() -> tuple[str, ...]:
-    return tuple(sorted(_SYSTEMS))
+    return tuple(sorted(set(_SYSTEMS) | set(_FACTORIES)))
 
 
 register_system("b0", B0System())
@@ -69,7 +98,9 @@ __all__ = [
     "B0System",
     "Prediction",
     "System",
+    "build_system",
     "get_system",
     "register_system",
+    "register_system_factory",
     "system_names",
 ]
