@@ -76,6 +76,13 @@ def collect(
             help="Disable the built-in workflow exclusion patterns.",
         ),
     ] = False,
+    flakes: Annotated[
+        bool,
+        typer.Option(
+            "--flakes",
+            help="Collect failed attempts from runs that later succeeded.",
+        ),
+    ] = False,
 ) -> None:
     token = _token()
     if not token:
@@ -102,6 +109,7 @@ def collect(
                 extra_secrets=(token,),
                 exclude_patterns=tuple(exclude_workflow or ()),
                 include_default_excludes=not no_default_excludes,
+                flakes=flakes,
             )
     except MissingTokenError as exc:
         typer.secho(str(exc), err=True, fg=typer.colors.RED)

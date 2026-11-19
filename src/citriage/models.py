@@ -116,6 +116,7 @@ class RunMeta(BaseModel):
     truncated_job_ids: list[int] = Field(default_factory=list)
     collected_at: datetime
     later_green_same_sha: bool | None = None
+    flake_confirmed: bool = False
 
 
 class RunsPage(BaseModel):

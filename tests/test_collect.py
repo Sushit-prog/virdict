@@ -126,6 +126,7 @@ def test_collect_writes_redacted_meta_and_logs(
     assert meta["failed_jobs"][0]["id"] == 501
     assert meta["failed_jobs"][0]["failed_step_names"] == ["pytest"]
     assert meta["later_green_same_sha"] is True
+    assert meta["flake_confirmed"] is False
     assert meta["logs"][0]["original_bytes_seen"] == len(raw_log)
     assert meta["logs"][0]["kept_bytes"] == len(raw_log)
     assert meta["logs"][0]["written_bytes"] == len(log_text.encode())
@@ -732,6 +733,298 @@ def test_collect_records_ceiling_original_size(
     assert log["original_bytes_seen"] == "50MiB+"
     assert log["truncated"] is True
     assert log["truncation_side"] == "head_dropped"
+
+
+@respx.mock
+def test_flakes_selects_previous_attempt_and_sets_flags(
+    client: GitHubClient,
+    tmp_path: Path,
+) -> None:
+    run = run_payload(
+        run_id=100,
+        workflow_id=10,
+        conclusion="success",
+        run_attempt=3,
+        head_sha="sha-1",
+    )
+    failed_job = job_payload(job_id=501)
+    success_job = job_payload(job_id=502, conclusion="success")
+    runs_route = respx.get(RUNS_URL).mock(return_value=httpx.Response(200, json=runs_response(run)))
+    attempt_route = respx.get(
+        "https://api.github.com/repos/o/r/actions/runs/100/attempts/2/jobs"
+    ).mock(return_value=httpx.Response(200, json=jobs_response(failed_job, success_job)))
+    logs_route = respx.get("https://api.github.com/repos/o/r/actions/jobs/501/logs").mock(
+        return_value=httpx.Response(200, content=b"ERROR: boom\n")
+    )
+
+    summary = collect_repos(
+        client,
+        ["o/r"],
+        per_repo=1,
+        out=tmp_path,
+        flakes=True,
+        now=DEFAULT_NOW,
+    )
+
+    assert summary.repos[0].runs_saved == 1
+    assert summary.repos[0].jobs_saved == 1
+    assert summary.repos[0].candidates_evaluated == 1
+    assert summary.repos[0].excluded == 0
+    assert summary.repos[0].skipped_aggregator_only == 0
+    assert runs_route.calls[0].request.url.params["status"] == "success"
+    assert attempt_route.call_count == 1
+    assert logs_route.call_count == 1
+
+    run_path = tmp_path / "o__r" / "100_a2"
+    meta = _read_meta(run_path)
+    assert run_path.exists()
+    assert not (tmp_path / "o__r" / "100").exists()
+    assert meta["run_id"] == 100
+    assert meta["run_attempt"] == 2
+    assert meta["conclusion"] == "failure"
+    assert meta["flake_confirmed"] is True
+    assert meta["later_green_same_sha"] is True
+    assert meta["head_sha"] == "sha-1"
+    assert [job["id"] for job in meta["failed_jobs"]] == [501]
+    assert [log["job_id"] for log in meta["logs"]] == [501]
+    assert (run_path / "job_501.log").exists()
+
+
+@respx.mock
+def test_flakes_skips_attempt_one(
+    client: GitHubClient,
+    tmp_path: Path,
+) -> None:
+    run = run_payload(
+        run_id=100,
+        workflow_id=10,
+        conclusion="success",
+        run_attempt=1,
+    )
+    runs_route = respx.get(RUNS_URL).mock(return_value=httpx.Response(200, json=runs_response(run)))
+    attempt_route = respx.get(
+        url__regex=r"https://api\.github\.com/repos/o/r/actions/runs/\d+/attempts/\d+/jobs"
+    ).mock(return_value=httpx.Response(200, json=jobs_response()))
+
+    summary = collect_repos(
+        client,
+        ["o/r"],
+        per_repo=1,
+        out=tmp_path,
+        flakes=True,
+        now=DEFAULT_NOW,
+    )
+
+    assert summary.repos[0].runs_saved == 0
+    assert summary.repos[0].candidates_evaluated == 0
+    assert summary.repos[0].excluded == 0
+    assert runs_route.called
+    assert not attempt_route.called
+
+
+@respx.mock
+def test_flakes_excluded_counts_only_rerun_success_runs(
+    client: GitHubClient,
+    tmp_path: Path,
+) -> None:
+    runs = [
+        run_payload(
+            run_id=1,
+            workflow_id=10,
+            name="CodeQL",
+            conclusion="success",
+            run_attempt=1,
+        ),
+        run_payload(
+            run_id=2,
+            workflow_id=20,
+            name="CodeQL",
+            conclusion="success",
+            run_attempt=2,
+        ),
+        run_payload(
+            run_id=3,
+            workflow_id=30,
+            name="CI",
+            conclusion="success",
+            run_attempt=2,
+        ),
+    ]
+    respx.get(RUNS_URL).mock(return_value=httpx.Response(200, json=runs_response(*runs)))
+
+    def jobs_for_attempt(request: httpx.Request) -> httpx.Response:
+        parts = request.url.path.split("/")
+        run_id = int(parts[-4])
+        return httpx.Response(
+            200,
+            json=jobs_response(job_payload(job_id=run_id + 100)),
+        )
+
+    attempt_route = respx.get(
+        url__regex=r"https://api\.github\.com/repos/o/r/actions/runs/\d+/attempts/\d+/jobs"
+    ).mock(side_effect=jobs_for_attempt)
+    respx.get(url__regex=r"https://api\.github\.com/repos/o/r/actions/jobs/\d+/logs").mock(
+        return_value=httpx.Response(200, content=b"log\n")
+    )
+
+    summary = collect_repos(
+        client,
+        ["o/r"],
+        per_repo=2,
+        out=tmp_path,
+        flakes=True,
+        now=DEFAULT_NOW,
+    )
+
+    assert summary.repos[0].runs_saved == 1
+    assert summary.repos[0].candidates_evaluated == 1
+    assert summary.repos[0].excluded == 1
+    assert attempt_route.call_count == 1
+    assert (tmp_path / "o__r" / "3_a1").exists()
+    assert not (tmp_path / "o__r" / "2_a1").exists()
+    assert not (tmp_path / "o__r" / "1_a0").exists()
+
+
+@respx.mock
+def test_flakes_is_idempotent(
+    client: GitHubClient,
+    tmp_path: Path,
+) -> None:
+    run = run_payload(
+        run_id=100,
+        workflow_id=10,
+        conclusion="success",
+        run_attempt=2,
+    )
+    job = job_payload(job_id=501)
+    runs_route = respx.get(RUNS_URL).mock(return_value=httpx.Response(200, json=runs_response(run)))
+    attempt_route = respx.get(
+        "https://api.github.com/repos/o/r/actions/runs/100/attempts/1/jobs"
+    ).mock(return_value=httpx.Response(200, json=jobs_response(job)))
+    logs_route = respx.get("https://api.github.com/repos/o/r/actions/jobs/501/logs").mock(
+        return_value=httpx.Response(200, content=b"log\n")
+    )
+
+    first = collect_repos(
+        client,
+        ["o/r"],
+        per_repo=1,
+        out=tmp_path,
+        flakes=True,
+        now=DEFAULT_NOW,
+    )
+    run_path = tmp_path / "o__r" / "100_a1"
+    meta_before = (run_path / "meta.json").read_text(encoding="utf-8")
+    counts_before = (attempt_route.call_count, logs_route.call_count)
+
+    second = collect_repos(
+        client,
+        ["o/r"],
+        per_repo=1,
+        out=tmp_path,
+        flakes=True,
+        now=DEFAULT_NOW,
+    )
+
+    assert first.repos[0].runs_saved == 1
+    assert second.repos[0].runs_saved == 0
+    assert second.repos[0].jobs_saved == 0
+    assert second.repos[0].runs_skipped == 1
+    assert second.repos[0].candidates_evaluated == 1
+    assert runs_route.call_count == 2
+    assert (attempt_route.call_count, logs_route.call_count) == counts_before
+    assert (run_path / "meta.json").read_text(encoding="utf-8") == meta_before
+
+
+@respx.mock
+def test_flakes_does_not_dedupe_signatures(
+    client: GitHubClient,
+    tmp_path: Path,
+) -> None:
+    runs = [
+        run_payload(
+            run_id=1,
+            workflow_id=10,
+            conclusion="success",
+            run_attempt=2,
+        ),
+        run_payload(
+            run_id=2,
+            workflow_id=10,
+            conclusion="success",
+            run_attempt=2,
+        ),
+    ]
+    respx.get(RUNS_URL).mock(return_value=httpx.Response(200, json=runs_response(*runs)))
+
+    def jobs_for_attempt(request: httpx.Request) -> httpx.Response:
+        parts = request.url.path.split("/")
+        run_id = int(parts[-4])
+        return httpx.Response(
+            200,
+            json=jobs_response(job_payload(job_id=run_id + 100, name="tests")),
+        )
+
+    attempt_route = respx.get(
+        url__regex=r"https://api\.github\.com/repos/o/r/actions/runs/\d+/attempts/\d+/jobs"
+    ).mock(side_effect=jobs_for_attempt)
+    respx.get(url__regex=r"https://api\.github\.com/repos/o/r/actions/jobs/\d+/logs").mock(
+        return_value=httpx.Response(200, content=b"log\n")
+    )
+
+    summary = collect_repos(
+        client,
+        ["o/r"],
+        per_repo=2,
+        out=tmp_path,
+        flakes=True,
+        now=DEFAULT_NOW,
+    )
+
+    assert summary.repos[0].runs_saved == 2
+    assert summary.repos[0].jobs_saved == 2
+    assert attempt_route.call_count == 2
+    assert (tmp_path / "o__r" / "1_a1").exists()
+    assert (tmp_path / "o__r" / "2_a1").exists()
+
+
+@respx.mock
+def test_flakes_skips_aggregator_only_run(
+    client: GitHubClient,
+    tmp_path: Path,
+) -> None:
+    run = run_payload(
+        run_id=100,
+        workflow_id=10,
+        conclusion="success",
+        run_attempt=2,
+    )
+    job = job_payload(
+        job_id=501,
+        name="lint passed",
+        steps=[{"name": "Require every lint job to succeed", "conclusion": "failure"}],
+    )
+    respx.get(RUNS_URL).mock(return_value=httpx.Response(200, json=runs_response(run)))
+    respx.get("https://api.github.com/repos/o/r/actions/runs/100/attempts/1/jobs").mock(
+        return_value=httpx.Response(200, json=jobs_response(job))
+    )
+    respx.get("https://api.github.com/repos/o/r/actions/jobs/501/logs").mock(
+        return_value=httpx.Response(200, content=b"log\n")
+    )
+
+    summary = collect_repos(
+        client,
+        ["o/r"],
+        per_repo=1,
+        out=tmp_path,
+        flakes=True,
+        now=DEFAULT_NOW,
+    )
+
+    assert summary.repos[0].runs_saved == 0
+    assert summary.repos[0].candidates_evaluated == 1
+    assert summary.repos[0].skipped_aggregator_only == 1
+    assert not (tmp_path / "o__r" / "100_a1").exists()
 
 
 @respx.mock

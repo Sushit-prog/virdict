@@ -202,6 +202,8 @@ def _build_meta(
     logs: list[LogMeta],
     later_green_same_sha: bool | None,
     collected_at: datetime,
+    *,
+    flake_confirmed: bool = False,
 ) -> RunMeta:
     pull_requests = [
         PullRequestMeta(
@@ -237,7 +239,16 @@ def _build_meta(
         truncated_job_ids=[log.job_id for log in logs if log.truncated],
         collected_at=collected_at,
         later_green_same_sha=later_green_same_sha,
+        flake_confirmed=flake_confirmed,
     )
+
+
+def _group_by_workflow(runs: list[WorkflowRun]) -> dict[str, deque[WorkflowRun]]:
+    groups: dict[str, deque[WorkflowRun]] = {}
+    for run in runs:
+        key = str(run.workflow_id) if run.workflow_id is not None else (run.name or "unknown")
+        groups.setdefault(key, deque()).append(run)
+    return groups
 
 
 def _collect_repo(
@@ -264,11 +275,7 @@ def _collect_repo(
         else:
             kept_runs.append(run)
 
-    groups: dict[str, deque[WorkflowRun]] = {}
-    for run in kept_runs:
-        key = str(run.workflow_id) if run.workflow_id is not None else (run.name or "unknown")
-        groups.setdefault(key, deque()).append(run)
-
+    groups = _group_by_workflow(kept_runs)
     used_signatures: dict[str, set[tuple[str, ...]]] = {key: set() for key in groups}
 
     while (
@@ -381,6 +388,134 @@ def _collect_repo(
             break
 
 
+def _collect_flakes_repo(
+    client: GitHubClient,
+    repo_summary: RepoSummary,
+    *,
+    per_repo: int,
+    out: Path,
+    now: datetime,
+    extra_secrets: tuple[str, ...],
+    exclude_patterns: list[re.Pattern[str]],
+) -> None:
+    owner, name = repo_summary.repo.split("/", 1)
+    success_runs = client.list_success_runs(
+        owner,
+        name,
+        since=now - timedelta(days=80),
+    )
+
+    kept_runs: list[WorkflowRun] = []
+    for run in success_runs:
+        if run.run_attempt <= 1:
+            continue
+        if _is_excluded(run, exclude_patterns):
+            repo_summary.excluded += 1
+        else:
+            kept_runs.append(run)
+
+    groups = _group_by_workflow(kept_runs)
+
+    while (
+        repo_summary.runs_saved < per_repo
+        and repo_summary.candidates_evaluated < MAX_CANDIDATES_PER_REPO
+        and any(groups.values())
+    ):
+        progressed = False
+        for key in list(groups):
+            if (
+                repo_summary.runs_saved >= per_repo
+                or repo_summary.candidates_evaluated >= MAX_CANDIDATES_PER_REPO
+            ):
+                break
+            queue = groups[key]
+            while queue:
+                if (
+                    repo_summary.runs_saved >= per_repo
+                    or repo_summary.candidates_evaluated >= MAX_CANDIDATES_PER_REPO
+                ):
+                    break
+                run = queue.popleft()
+                repo_summary.candidates_evaluated += 1
+                attempt = run.run_attempt - 1
+                path = run_dir(out, repo_summary.repo, run.id, attempt=attempt)
+
+                if path.exists():
+                    if read_run_meta(path) is None:
+                        repo_summary.errors.append(
+                            f"run {run.id} attempt {attempt}: existing run directory has no "
+                            "readable meta.json; skipped"
+                        )
+                    repo_summary.runs_skipped += 1
+                    progressed = True
+                    break
+
+                try:
+                    jobs = client.list_failed_jobs_for_attempt(owner, name, run.id, attempt)
+                except (AuthenticationError, RateLimitExhausted):
+                    raise
+                except CitriageError as exc:
+                    repo_summary.errors.append(f"run {run.id} attempt {attempt}: {exc}")
+                    continue
+
+                failed_jobs = [_job_meta(job) for job in jobs]
+                if not failed_jobs:
+                    continue
+
+                try:
+                    logs, log_files, aggregator_ids = _fetch_logs(
+                        client,
+                        owner,
+                        name,
+                        failed_jobs,
+                        extra_secrets,
+                    )
+                    failed_jobs = [
+                        job.model_copy(update={"likely_aggregator": job.id in aggregator_ids})
+                        for job in failed_jobs
+                    ]
+                    if all(job.likely_aggregator for job in failed_jobs):
+                        repo_summary.skipped_aggregator_only += 1
+                        progressed = True
+                        break
+
+                    attempt_run = run.model_copy(
+                        update={"run_attempt": attempt, "conclusion": "failure"}
+                    )
+                    meta = _build_meta(
+                        attempt_run,
+                        repo_summary.repo,
+                        failed_jobs,
+                        logs,
+                        True,
+                        now,
+                        flake_confirmed=True,
+                    )
+                    wrote = write_run(
+                        path,
+                        meta,
+                        log_files,
+                        extra_secrets=extra_secrets,
+                    )
+                except (AuthenticationError, RateLimitExhausted):
+                    raise
+                except CitriageError as exc:
+                    repo_summary.errors.append(f"run {run.id} attempt {attempt}: {exc}")
+                    continue
+
+                if wrote:
+                    repo_summary.runs_saved += 1
+                    repo_summary.jobs_saved += len(logs)
+                    repo_summary.log_sizes.extend(log.written_bytes for log in logs)
+                else:
+                    repo_summary.runs_skipped += 1
+                progressed = True
+                break
+
+        if not progressed:
+            break
+
+
 def collect_repos(
     client: GitHubClient,
     repos: list[str],
@@ -390,6 +525,7 @@ def collect_repos(
     extra_secrets: tuple[str, ...] = (),
     exclude_patterns: Sequence[str] = (),
     include_default_excludes: bool = True,
+    flakes: bool = False,
     now: datetime | None = None,
 ) -> CollectSummary:
     if per_repo < 1:
@@ -406,7 +542,8 @@ def collect_repos(
 
     for repo_summary in summary.repos:
         try:
-            _collect_repo(
+            collector = _collect_flakes_repo if flakes else _collect_repo
+            collector(
                 client,
                 repo_summary,
                 per_repo=per_repo,

@@ -93,6 +93,35 @@ def test_list_failed_runs_stops_when_page_is_entirely_old(
 
 
 @respx.mock
+def test_list_success_runs_uses_success_status(
+    client: GitHubClient,
+) -> None:
+    route = respx.get(RUNS_URL).mock(
+        return_value=httpx.Response(
+            200,
+            json=runs_response(
+                run_payload(
+                    run_id=1,
+                    conclusion="success",
+                    run_attempt=2,
+                )
+            ),
+        )
+    )
+
+    runs = client.list_success_runs(
+        "o",
+        "r",
+        since=DEFAULT_NOW - timedelta(days=80),
+    )
+
+    assert [run.id for run in runs] == [1]
+    assert runs[0].run_attempt == 2
+    assert route.calls[0].request.url.params["status"] == "success"
+    assert route.calls[0].request.url.params["per_page"] == "50"
+
+
+@respx.mock
 def test_list_failed_jobs_paginates_and_filters(
     client: GitHubClient,
 ) -> None:
@@ -118,6 +147,42 @@ def test_list_failed_jobs_paginates_and_filters(
 
     assert [job.id for job in jobs] == [101, 103]
     assert route.call_count == 2
+
+
+@respx.mock
+def test_list_failed_jobs_for_attempt_paginates_and_filters(
+    client: GitHubClient,
+) -> None:
+    jobs_url = "https://api.github.com/repos/o/r/actions/runs/1/attempts/2/jobs"
+    route = respx.get(jobs_url).mock(
+        side_effect=[
+            httpx.Response(
+                200,
+                json=jobs_response(
+                    job_payload(job_id=101),
+                    job_payload(job_id=102, conclusion="success"),
+                ),
+                headers={"Link": f'<{jobs_url}?page=2>; rel="next"'},
+            ),
+            httpx.Response(
+                200,
+                json=jobs_response(job_payload(job_id=103)),
+            ),
+        ]
+    )
+
+    jobs = client.list_failed_jobs_for_attempt("o", "r", 1, 2)
+
+    assert [job.id for job in jobs] == [101, 103]
+    assert route.call_count == 2
+    assert route.calls[0].request.url.path == "/repos/o/r/actions/runs/1/attempts/2/jobs"
+
+
+def test_list_failed_jobs_for_attempt_rejects_non_positive_attempt(
+    client: GitHubClient,
+) -> None:
+    with pytest.raises(ValueError, match="attempt must be positive"):
+        client.list_failed_jobs_for_attempt("o", "r", 1, 0)
 
 
 @respx.mock

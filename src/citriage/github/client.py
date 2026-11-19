@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from email.utils import parsedate_to_datetime
 from types import TracebackType
-from typing import Any, Self, cast
+from typing import Any, Literal, Self, cast
 
 import httpx
 from pydantic import ValidationError
@@ -289,18 +289,19 @@ class GitHubClient:
             url = self._next_url(response)
             current_params = None
 
-    def list_failed_runs(
+    def _list_runs(
         self,
         owner: str,
         repo: str,
         *,
+        status: Literal["failure", "success"],
         since: datetime,
-        per_page: int = 50,
+        per_page: int,
     ) -> list[WorkflowRun]:
         cutoff = _as_utc(since)
         path = f"/repos/{owner}/{repo}/actions/runs"
         params: dict[str, str | int] = {
-            "status": "failure",
+            "status": status,
             "per_page": per_page,
         }
         runs: list[WorkflowRun] = []
@@ -315,6 +316,46 @@ class GitHubClient:
                 break
         return runs
 
+    def list_failed_runs(
+        self,
+        owner: str,
+        repo: str,
+        *,
+        since: datetime,
+        per_page: int = 50,
+    ) -> list[WorkflowRun]:
+        return self._list_runs(
+            owner,
+            repo,
+            status="failure",
+            since=since,
+            per_page=per_page,
+        )
+
+    def list_success_runs(
+        self,
+        owner: str,
+        repo: str,
+        *,
+        since: datetime,
+        per_page: int = 50,
+    ) -> list[WorkflowRun]:
+        return self._list_runs(
+            owner,
+            repo,
+            status="success",
+            since=since,
+            per_page=per_page,
+        )
+
+    def _list_failed_jobs(self, path: str, *, per_page: int) -> list[Job]:
+        params: dict[str, str | int] = {"per_page": per_page}
+        jobs: list[Job] = []
+        for payload in self._iter_pages(path, params):
+            page = self._parse_jobs_page(payload)
+            jobs.extend(job for job in page.jobs if job.conclusion == "failure")
+        return jobs
+
     def list_failed_jobs(
         self,
         owner: str,
@@ -324,12 +365,21 @@ class GitHubClient:
         per_page: int = 100,
     ) -> list[Job]:
         path = f"/repos/{owner}/{repo}/actions/runs/{run_id}/jobs"
-        params: dict[str, str | int] = {"per_page": per_page}
-        jobs: list[Job] = []
-        for payload in self._iter_pages(path, params):
-            page = self._parse_jobs_page(payload)
-            jobs.extend(job for job in page.jobs if job.conclusion == "failure")
-        return jobs
+        return self._list_failed_jobs(path, per_page=per_page)
+
+    def list_failed_jobs_for_attempt(
+        self,
+        owner: str,
+        repo: str,
+        run_id: int,
+        attempt: int,
+        *,
+        per_page: int = 100,
+    ) -> list[Job]:
+        if attempt < 1:
+            raise ValueError("attempt must be positive")
+        path = f"/repos/{owner}/{repo}/actions/runs/{run_id}/attempts/{attempt}/jobs"
+        return self._list_failed_jobs(path, per_page=per_page)
 
     def _read_tail(
         self,

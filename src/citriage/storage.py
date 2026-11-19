@@ -16,8 +16,9 @@ def repo_dir(out: Path, repo: str) -> Path:
     return out / repo.replace("/", "__")
 
 
-def run_dir(out: Path, repo: str, run_id: int) -> Path:
-    return repo_dir(out, repo) / str(run_id)
+def run_dir(out: Path, repo: str, run_id: int, *, attempt: int | None = None) -> Path:
+    name = f"{run_id}_a{attempt}" if attempt is not None else str(run_id)
+    return repo_dir(out, repo) / name
 
 
 def read_run_meta(path: Path) -> RunMeta | None:
