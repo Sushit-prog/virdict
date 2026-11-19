@@ -3,16 +3,21 @@ from __future__ import annotations
 import os
 import re
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, cast
 
 import typer
 from dotenv import load_dotenv
 
+from citriage.bench.metrics import BENCH_SEED, BOOTSTRAP_RESAMPLES
+from citriage.bench.report import DEFAULT_REPORT_DIR, write_bench_reports
+from citriage.bench.runner import BenchError, Split, run_bench, split_guard
+from citriage.bench.systems import get_system
 from citriage.cases import CASES_PATH, build_cases
 from citriage.collect import collect_repos
 from citriage.errors import AuthenticationError, CitriageError, MissingTokenError
 from citriage.github.client import GitHubClient
 from citriage.label_cli import label_app
+from citriage.labels import LABELS_PATH
 from citriage.summary import render_summary
 
 app = typer.Typer(add_completion=False, no_args_is_help=True)
@@ -153,3 +158,64 @@ def cases_build(
     ] = CASES_PATH,
 ) -> None:
     build_cases(raw, out)
+
+
+@app.command("bench")
+def bench(
+    system: Annotated[str, typer.Option("--system", help="Registered system name.")],
+    split: Annotated[str, typer.Option("--split", help="Split to score: dev or test.")],
+    labeler: Annotated[str | None, typer.Option("--labeler")] = None,
+    confirm_test: Annotated[
+        bool,
+        typer.Option("--confirm-test", help="Required when benchmarking the test split."),
+    ] = False,
+    cases: Annotated[Path, typer.Option("--cases")] = CASES_PATH,
+    labels: Annotated[Path, typer.Option("--labels")] = LABELS_PATH,
+    raw: Annotated[Path, typer.Option("--raw")] = Path("data/raw"),
+    report_dir: Annotated[Path, typer.Option("--report-dir")] = DEFAULT_REPORT_DIR,
+    seed: Annotated[int, typer.Option("--seed")] = BENCH_SEED,
+    resamples: Annotated[int, typer.Option("--resamples", min=1)] = BOOTSTRAP_RESAMPLES,
+) -> None:
+    if split not in ("dev", "test"):
+        typer.secho("--split must be dev or test", err=True, fg=typer.colors.RED)
+        raise typer.Exit(2)
+    typed_split = cast(Split, split)
+    try:
+        warning = split_guard(typed_split, confirm_test)
+    except BenchError as exc:
+        typer.secho(str(exc), err=True, fg=typer.colors.RED)
+        raise typer.Exit(2) from exc
+    if warning is not None:
+        typer.secho(warning, err=True, fg=typer.colors.YELLOW)
+
+    try:
+        predictor = get_system(system)
+    except KeyError as exc:
+        typer.secho(str(exc), err=True, fg=typer.colors.RED)
+        raise typer.Exit(2) from exc
+
+    resolved_labeler = labeler or os.environ.get("LABELER", "").strip() or "labeler"
+    try:
+        result = run_bench(
+            system=predictor,
+            system_name=system,
+            split=typed_split,
+            labeler=resolved_labeler,
+            cases_path=cases,
+            labels_path=labels,
+            raw_root=raw,
+            confirm_test=confirm_test,
+            seed=seed,
+            resamples=resamples,
+        )
+    except BenchError as exc:
+        typer.secho(str(exc), err=True, fg=typer.colors.RED)
+        raise typer.Exit(2) from exc
+    except ValueError as exc:
+        typer.secho(str(exc), err=True, fg=typer.colors.RED)
+        raise typer.Exit(1) from exc
+
+    print(f"N labeled: {result.n_labeled}")
+    csv_path, markdown_path = write_bench_reports(result, report_dir)
+    print(f"wrote {csv_path}")
+    print(f"wrote {markdown_path}")

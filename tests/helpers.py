@@ -1,7 +1,12 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, Literal
+
+from citriage.bench.systems import Prediction
+from citriage.cases import Case
+from citriage.labels import Label, LabelAction, LabelName
+from citriage.parse.logparse import Evidence
 
 DEFAULT_NOW = datetime(2026, 11, 19, 12, 0, tzinfo=UTC)
 
@@ -75,3 +80,100 @@ def runs_response(*runs: dict[str, Any]) -> dict[str, Any]:
 
 def jobs_response(*jobs: dict[str, Any]) -> dict[str, Any]:
     return {"total_count": len(jobs), "jobs": list(jobs)}
+
+
+def bench_evidence(
+    *,
+    id: str = "evidence-1",
+    kind: str = "test_failure",
+    line_no: int = 10,
+    text: str = "FAILED tests/test_x.py::test_a",
+) -> Evidence:
+    return Evidence(
+        id=id,
+        kind=kind,
+        line_no=line_no,
+        text=text,
+        tool="pytest",
+        in_region=True,
+    )
+
+
+def bench_case(
+    *,
+    case_id: str = "c1",
+    repo: str = "o/r",
+    split: Literal["dev", "test"] = "dev",
+    in_benchmark: bool = True,
+    evidence: list[Evidence] | None = None,
+) -> Case:
+    return Case(
+        case_id=case_id,
+        repo=repo,
+        run_id=1,
+        run_dir_name="1",
+        head_sha="sha-1",
+        created_at=DEFAULT_NOW,
+        workflow_name="CI",
+        step="Run tests",
+        job_id=100,
+        job_name="job",
+        sibling_job_ids=[],
+        signature="sig",
+        signature_rank=1,
+        likely_aggregator=False,
+        flake_confirmed=False,
+        in_benchmark=in_benchmark,
+        split=split,
+        seed="seed",
+        region_start=1,
+        region_end=100,
+        tools_detected=["pytest"],
+        has_nontrivial_error=False,
+        evidence=evidence or [],
+        b0_label=LabelName.UNKNOWN,
+        b0_culprit_file=None,
+        b0_evidence_ids=[],
+    )
+
+
+def bench_label(
+    *,
+    case_id: str = "c1",
+    labeler: str = "alice",
+    action: LabelAction = "label",
+    label: LabelName | None = LabelName.TEST_FAILURE,
+    evidence_lines: list[int] | None = None,
+    culprit_file: str | None = None,
+    labeled_at: datetime | None = None,
+    id: str = "label-1",
+    supersedes: str | None = None,
+    repo: str = "o/r",
+) -> Label:
+    return Label(
+        id=id,
+        case_id=case_id,
+        repo=repo,
+        run_id=1,
+        job_id=100,
+        action=action,
+        label=label,
+        evidence_lines=evidence_lines or [],
+        culprit_file=culprit_file,
+        labeler=labeler,
+        labeled_at=labeled_at or DEFAULT_NOW,
+        supersedes=supersedes,
+    )
+
+
+def bench_prediction(
+    *,
+    label: LabelName = LabelName.TEST_FAILURE,
+    culprit_file: str | None = None,
+    cited_evidence_ids: list[str] | None = None,
+) -> Prediction:
+    return Prediction(
+        label=label,
+        culprit_file=culprit_file,
+        cited_evidence_ids=cited_evidence_ids or [],
+    )
