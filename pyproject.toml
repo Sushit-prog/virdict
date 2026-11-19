@@ -1,0 +1,51 @@
+[project]
+name = "citriage"
+version = "0.1.0"
+description = "Snapshot failed GitHub Actions runs from public repos for a benchmark dataset."
+readme = "README.md"
+authors = [
+    { name = "Sushit-prog", email = "pakrashys@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "httpx>=0.27.0",
+    "pydantic>=2.7.0",
+    "typer>=0.12.3",
+]
+
+[project.scripts]
+citriage = "citriage.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/citriage"]
+
+[dependency-groups]
+dev = [
+    "mypy>=1.10.0",
+    "pytest>=8.2.0",
+    "respx>=0.21.1",
+    "ruff>=0.5.0",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+files = ["src"]
+mypy_path = "src"
+warn_unreachable = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
