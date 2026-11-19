@@ -1,0 +1,10 @@
+##[group]Run tox -e plugins
+plugins: commands[0] /home/runner/work/pytest/pytest> uv pip check
+Using Python 3.12.16 environment at: /home/runner/work/pytest/pytest/.tox/plugins
+Found 1 incompatibility
+The package `pytest-asyncio` requires `pytest>=8.4,<10`, but `10.0.0.dev12+gc2df3a28d` is installed
+plugins: exit 1 (0.01 seconds) /home/runner/work/pytest/pytest> uv pip check pid=2880
+  plugins: FAIL code 1 (6.31=setup[6.30]+cmd[0.01] seconds)
+  evaluation failed :( (6.43 seconds)
+##[error]Process completed with exit code 1.
+##[group]Post job cleanup.

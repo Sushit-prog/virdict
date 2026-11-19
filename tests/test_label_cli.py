@@ -86,7 +86,7 @@ def test_plan_queue_respects_constraints_and_reports_relaxations(tmp_path: Path)
         "signature_rank from <=2 to <=3",
         "per-repo cap from 12 to 15",
     ]
-    assert plan.shortfalls == ["test short by 4"]
+    assert plan.shortfalls == ["test short by 2"]
     assert load_queue(path) == plan
 
 

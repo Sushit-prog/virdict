@@ -5,6 +5,7 @@ from collections import Counter
 from pathlib import Path
 
 from citriage.cases import Case, load_cases
+from citriage.parse.logparse import EXIT_CODE_RE, _normalize
 from citriage.storage import log_path
 
 RAW = Path("data/raw")
@@ -20,6 +21,37 @@ def _log_path(case: Case) -> Path | None:
         run_dir_name=case.run_dir_name or None,
     )
     return path if path.exists() else None
+
+
+def _exit_code_index(lines: list[str]) -> int | None:
+    for index in range(len(lines) - 1, -1, -1):
+        if EXIT_CODE_RE.match(_normalize(lines[index]).strip()):
+            return index
+    return None
+
+
+def _print_dev_contexts(cases: list[Case]) -> None:
+    for case in cases:
+        if case.split != "dev":
+            continue
+        print(
+            f"  DEV CONTEXT {case.case_id} | {case.split} | {case.repo} | "
+            f"{case.job_name} | {case.step}"
+        )
+        path = _log_path(case)
+        if path is None:
+            print("    raw log missing")
+            continue
+        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+        anchor = _exit_code_index(lines)
+        if anchor is None:
+            context = lines[-20:]
+            print("    no exit-code line; showing last 20 lines")
+        else:
+            context = lines[max(0, anchor - 20) : anchor]
+            print(f"    20 lines before exit-code line {anchor + 1}")
+        for number, line in enumerate(context, start=max(1, (anchor or len(lines)) - 19)):
+            print(f"    {number:>6} | {line[:300]}")
 
 
 def _pytest_excerpts(cases: list[Case]) -> list[tuple[Case, str, list[str]]]:
@@ -57,7 +89,7 @@ def main() -> int:
     labels_bench = Counter(case.b0_label.value for case in bench)
     per_repo_split = Counter((case.repo, case.split) for case in cases)
     per_repo_split_bench = Counter((case.repo, case.split) for case in bench)
-    excerpts = _pytest_excerpts(bench)
+    excerpts = _pytest_excerpts([case for case in bench if case.split == "dev"])
 
     rate_excluding = len(zeros_excluding_tail) / len(bench) if bench else 0.0
     rate_including = len(zeros_including_tail) / len(bench) if bench else 0.0
@@ -147,7 +179,12 @@ def main() -> int:
     print("B0 labels in_benchmark:", dict(labels_bench.most_common()))
     print("zero-evidence in_benchmark cases (excluding tail, first 15):")
     for case in zeros_excluding_tail[:15]:
-        print(f"  {case.case_id} | {case.repo} | {case.run_id} | {case.job_name} | {case.step}")
+        print(
+            f"  {case.case_id} | {case.split} | {case.repo} | {case.run_id} | "
+            f"{case.job_name} | {case.step}"
+        )
+    print("dev-only raw contexts for zero-evidence cases:")
+    _print_dev_contexts(zeros_excluding_tail[:15])
     print(f"wrote {REPORT}")
     return 0
 

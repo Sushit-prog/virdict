@@ -178,25 +178,6 @@
       "selection_reason": "quota"
     },
     {
-      "case_id": "44609277582:247aab65",
-      "repo": "BerriAI/litellm",
-      "run_id": 44609277582,
-      "split": "dev",
-      "workflow_name": "LiteLLM Rust",
-      "step": "Run pytest tests/test_litellm_rust with the compiled extension",
-      "signature_rank": 2,
-      "flake_confirmed": false,
-      "tools_detected": [
-        "basedpyright",
-        "mypy",
-        "pip",
-        "pytest",
-        "ruff",
-        "uv"
-      ],
-      "selection_reason": "quota"
-    },
-    {
       "case_id": "44612518106:82ab6b42",
       "repo": "BerriAI/litellm",
       "run_id": 44612518106,
@@ -476,6 +457,22 @@
       "selection_reason": "quota"
     },
     {
+      "case_id": "44485411502_a1:d31d1748",
+      "repo": "pydantic/pydantic",
+      "run_id": 44485411502,
+      "split": "dev",
+      "workflow_name": "CI",
+      "step": "Run uv run pytest",
+      "signature_rank": 1,
+      "flake_confirmed": true,
+      "tools_detected": [
+        "mypy",
+        "pytest",
+        "uv"
+      ],
+      "selection_reason": "flake_minimum"
+    },
+    {
       "case_id": "44485422533_a1:6b176493",
       "repo": "pydantic/pydantic",
       "run_id": 44485422533,
@@ -569,6 +566,22 @@
       "selection_reason": "flake_minimum"
     },
     {
+      "case_id": "42454330481_a1:0f89d2d3",
+      "repo": "pypa/pip",
+      "run_id": 42454330481,
+      "split": "dev",
+      "workflow_name": "CI",
+      "step": "Run integration tests",
+      "signature_rank": 1,
+      "flake_confirmed": true,
+      "tools_detected": [
+        "pip",
+        "pytest",
+        "uv"
+      ],
+      "selection_reason": "flake_minimum"
+    },
+    {
       "case_id": "44351371505:ac6daf42",
       "repo": "pypa/pip",
       "run_id": 44351371505,
@@ -594,6 +607,7 @@
       "tools_detected": [
         "pip",
         "pytest",
+        "tox",
         "uv"
       ],
       "selection_reason": "quota"
@@ -610,6 +624,7 @@
       "tools_detected": [
         "pip",
         "pytest",
+        "tox",
         "uv"
       ],
       "selection_reason": "flake_minimum"
@@ -626,9 +641,27 @@
       "tools_detected": [
         "pip",
         "pytest",
+        "tox",
         "uv"
       ],
       "selection_reason": "flake_minimum"
+    },
+    {
+      "case_id": "41296320358:73f13307",
+      "repo": "pytest-dev/pytest",
+      "run_id": 41296320358,
+      "split": "dev",
+      "workflow_name": "test",
+      "step": "Test without coverage",
+      "signature_rank": 1,
+      "flake_confirmed": false,
+      "tools_detected": [
+        "pip",
+        "pytest",
+        "tox",
+        "uv"
+      ],
+      "selection_reason": "quota"
     },
     {
       "case_id": "41496369554:4e65dace",
@@ -642,6 +675,7 @@
       "tools_detected": [
         "pip",
         "pytest",
+        "tox",
         "uv"
       ],
       "selection_reason": "quota"
@@ -653,11 +687,12 @@
       "split": "test",
       "workflow_name": "test",
       "step": "Test without coverage",
-      "signature_rank": 2,
+      "signature_rank": 1,
       "flake_confirmed": false,
       "tools_detected": [
         "pip",
         "pytest",
+        "tox",
         "uv"
       ],
       "selection_reason": "quota"
@@ -674,6 +709,7 @@
       "tools_detected": [
         "pip",
         "pytest",
+        "tox",
         "uv"
       ],
       "selection_reason": "quota"
@@ -690,6 +726,7 @@
       "tools_detected": [
         "pip",
         "pytest",
+        "tox",
         "uv"
       ],
       "selection_reason": "quota"
@@ -706,6 +743,7 @@
       "tools_detected": [
         "pip",
         "pytest",
+        "tox",
         "uv"
       ],
       "selection_reason": "quota"
@@ -722,22 +760,7 @@
       "tools_detected": [
         "pip",
         "pytest",
-        "uv"
-      ],
-      "selection_reason": "quota"
-    },
-    {
-      "case_id": "41701436116:73f13307",
-      "repo": "pytest-dev/pytest",
-      "run_id": 41701436116,
-      "split": "dev",
-      "workflow_name": "test",
-      "step": "Test without coverage",
-      "signature_rank": 2,
-      "flake_confirmed": false,
-      "tools_detected": [
-        "pip",
-        "pytest",
+        "tox",
         "uv"
       ],
       "selection_reason": "quota"
@@ -754,6 +777,7 @@
       "tools_detected": [
         "pip",
         "pytest",
+        "tox",
         "uv"
       ],
       "selection_reason": "quota"
@@ -769,6 +793,7 @@
       "flake_confirmed": false,
       "tools_detected": [
         "pytest",
+        "tox",
         "uv"
       ],
       "selection_reason": "quota"
@@ -785,6 +810,7 @@
       "tools_detected": [
         "pip",
         "pytest",
+        "tox",
         "uv"
       ],
       "selection_reason": "quota"
@@ -801,6 +827,7 @@
       "tools_detected": [
         "pip",
         "pytest",
+        "tox",
         "uv"
       ],
       "selection_reason": "quota"
@@ -817,6 +844,7 @@
       "tools_detected": [
         "pip",
         "pytest",
+        "tox",
         "uv"
       ],
       "selection_reason": "quota"
@@ -847,6 +875,7 @@
       "tools_detected": [
         "pip",
         "pytest",
+        "tox",
         "uv"
       ],
       "selection_reason": "quota"
@@ -878,22 +907,7 @@
       "tools_detected": [
         "pip",
         "pytest",
-        "uv"
-      ],
-      "selection_reason": "quota"
-    },
-    {
-      "case_id": "43573214895:73f13307",
-      "repo": "pytest-dev/pytest",
-      "run_id": 43573214895,
-      "split": "dev",
-      "workflow_name": "test",
-      "step": "Test without coverage",
-      "signature_rank": 1,
-      "flake_confirmed": false,
-      "tools_detected": [
-        "pip",
-        "pytest",
+        "tox",
         "uv"
       ],
       "selection_reason": "quota"
@@ -910,6 +924,7 @@
       "tools_detected": [
         "pip",
         "pytest",
+        "tox",
         "uv"
       ],
       "selection_reason": "quota"
@@ -921,11 +936,12 @@
       "split": "test",
       "workflow_name": "test",
       "step": "Test with coverage",
-      "signature_rank": 1,
+      "signature_rank": 2,
       "flake_confirmed": false,
       "tools_detected": [
         "pip",
         "pytest",
+        "tox",
         "uv"
       ],
       "selection_reason": "quota"
@@ -937,11 +953,12 @@
       "split": "test",
       "workflow_name": "test",
       "step": "Test without coverage",
-      "signature_rank": 2,
+      "signature_rank": 3,
       "flake_confirmed": false,
       "tools_detected": [
         "pip",
         "pytest",
+        "tox",
         "uv"
       ],
       "selection_reason": "quota"
@@ -958,6 +975,7 @@
       "tools_detected": [
         "pip",
         "pytest",
+        "tox",
         "uv"
       ],
       "selection_reason": "quota"
@@ -974,6 +992,7 @@
       "tools_detected": [
         "pip",
         "pytest",
+        "tox",
         "uv"
       ],
       "selection_reason": "quota"
@@ -985,11 +1004,12 @@
       "split": "test",
       "workflow_name": "test",
       "step": "Test without coverage",
-      "signature_rank": 1,
+      "signature_rank": 2,
       "flake_confirmed": false,
       "tools_detected": [
         "pip",
         "pytest",
+        "tox",
         "uv"
       ],
       "selection_reason": "quota"
@@ -1146,9 +1166,10 @@
       "tools_detected": [
         "pip",
         "pytest",
+        "tox",
         "uv"
       ],
-      "selection_reason": "flake_minimum"
+      "selection_reason": "quota"
     },
     {
       "case_id": "41923681150_a1:d9bb7158",
@@ -1179,6 +1200,24 @@
       "selection_reason": "flake_minimum"
     },
     {
+      "case_id": "43480703311:d2ed58f4",
+      "repo": "tox-dev/tox",
+      "run_id": 43480703311,
+      "split": "test",
+      "workflow_name": "\ud83e\uddea check",
+      "step": "\ud83e\uddea Run test suite",
+      "signature_rank": 1,
+      "flake_confirmed": false,
+      "tools_detected": [
+        "mypy",
+        "pip",
+        "pytest",
+        "tox",
+        "uv"
+      ],
+      "selection_reason": "quota"
+    },
+    {
       "case_id": "43480703311:473ff47c",
       "repo": "tox-dev/tox",
       "run_id": 43480703311,
@@ -1190,6 +1229,7 @@
       "tools_detected": [
         "pip",
         "ruff",
+        "tox",
         "uv"
       ],
       "selection_reason": "quota"
@@ -1204,6 +1244,24 @@
       "signature_rank": 3,
       "flake_confirmed": false,
       "tools_detected": [
+        "uv"
+      ],
+      "selection_reason": "quota"
+    },
+    {
+      "case_id": "44346351247:d2ed58f4",
+      "repo": "tox-dev/tox",
+      "run_id": 44346351247,
+      "split": "test",
+      "workflow_name": "\ud83e\uddea check",
+      "step": "\ud83e\uddea Run test suite",
+      "signature_rank": 2,
+      "flake_confirmed": false,
+      "tools_detected": [
+        "mypy",
+        "pip",
+        "pytest",
+        "tox",
         "uv"
       ],
       "selection_reason": "quota"
@@ -1237,7 +1295,7 @@
         "pytest",
         "uv"
       ],
-      "selection_reason": "flake_minimum"
+      "selection_reason": "quota"
     },
     {
       "case_id": "42310471228_a1:fcab481b",
@@ -1305,6 +1363,6 @@
     "per-repo cap from 12 to 15"
   ],
   "shortfalls": [
-    "test short by 4"
+    "test short by 2"
   ]
 }

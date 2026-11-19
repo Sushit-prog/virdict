@@ -1,0 +1,8 @@
+##[group]Run uv run pytest
+tests/test_json_schema.py ......
+Fatal Python error: Aborted
+
+Stack (most recent call first, approximate line numbers):
+  File "/home/runner/work/pydantic/pydantic/pydantic/json_schema.py", line 3134 in _get_all_json_refs
+##[error]Process completed with exit code 134.
+##[group]Post job cleanup.

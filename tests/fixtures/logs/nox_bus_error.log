@@ -1,0 +1,6 @@
+##[group]Run nox -s test-3.12
+===== 1251 passed, 47 skipped, 22 xfailed, 2 xpassed in 726.46s ======
+nox > Session test-3.12 was successful in 12 minutes.
+/Users/runner/work/_temp/0f36baef.sh: line 1: 61103 Bus error: 10           python -m nox -s test-3.12 --no-install -- tests/functional
+##[error]Process completed with exit code 1.
+##[group]Post job cleanup.

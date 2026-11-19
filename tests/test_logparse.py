@@ -147,6 +147,33 @@ def test_run_tests_import_error_exact_lines() -> None:
     assert all(item.tool == "pytest" for item in items)
 
 
+def test_pytest_fatal_abort_exact_lines() -> None:
+    parsed = parse_log(_load("pytest_fatal_abort.log"))
+    items = [item for item in parsed.evidence if item.kind == "test_failure"]
+    assert [item.line_no for item in items] == [3, 6]
+    assert all(item.tool == "pytest" for item in items)
+    assert "uv" in parsed.tools_detected
+    assert "json_schema.py" in items[1].text
+
+
+def test_tox_uv_incompatibility_exact_lines() -> None:
+    parsed = parse_log(_load("tox_uv_incompatibility.log"))
+    dependency = [item for item in parsed.evidence if item.kind == "dependency"]
+    tox = [item for item in parsed.evidence if item.tool == "tox"]
+    assert [item.line_no for item in dependency] == [4, 5]
+    assert [item.line_no for item in tox] == [7, 8]
+    assert all(item.kind == "test_failure" for item in tox)
+    assert "tox" in parsed.tools_detected
+    assert "uv" in parsed.tools_detected
+
+
+def test_nox_bus_error_exact_line() -> None:
+    parsed = parse_log(_load("nox_bus_error.log"))
+    items = [item for item in parsed.evidence if item.kind == "infra"]
+    assert [item.line_no for item in items] == [4]
+    assert all(item.in_region for item in parsed.evidence)
+
+
 def test_tail_fallback_uses_15_original_line_numbers() -> None:
     lines = ["##[group]Run unknown tool"]
     lines.extend(f"noise line {number}" for number in range(1, 20))

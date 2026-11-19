@@ -42,6 +42,14 @@ RATCHET_PATH_RE = re.compile(r"^(.+?):(\d+)$")
 TEST_RUNNER_IMPORT_RE = re.compile(r"^ImportError while loading conftest ['\"](.+?)['\"]\.?$")
 TEST_RUNNER_E_RE = re.compile(r"^E\s{3}(.+)$")
 TEST_FRAME_RE = re.compile(r"^(.+?):(\d+): in .+$")
+FATAL_PYTHON_RE = re.compile(r"^Fatal Python error:\s*(.+)$")
+PYTHON_STACK_FRAME_RE = re.compile(r'^\s*File "(.+?)", line (\d+) in (.+)$')
+TOX_FAIL_RE = re.compile(r"^\s*\S+:\s+FAIL code \d+")
+TOX_EVALUATION_RE = re.compile(r"^\s*evaluation failed\s*:\(")
+UV_INCOMPATIBILITY_RE = re.compile(
+    r"^The package `(.+?)` requires `(.+)`, but `(.+?)` is installed\.?$"
+)
+BUS_ERROR_RE = re.compile(r"\b(?:Bus error|Segmentation fault)\b", re.IGNORECASE)
 
 DEPENDENCY_PATTERNS = (
     re.compile(r"^ERROR:"),
@@ -49,8 +57,11 @@ DEPENDENCY_PATTERNS = (
     re.compile(r"Could not find a version"),
     re.compile(r"SolverProblemError"),
     re.compile(r"Failed building wheel"),
+    UV_INCOMPATIBILITY_RE,
+    re.compile(r"^Found \d+ incompatibilit(?:y|ies)\b"),
 )
 INFRA_PATTERNS = (
+    BUS_ERROR_RE,
     re.compile(r"\b(?:timed out|timeout waiting|TimeoutError)\b", re.IGNORECASE),
     re.compile(r"\b(?:ConnectionError|ReadTimeout)\b"),
     re.compile(r"The operation was canceled", re.IGNORECASE),
@@ -78,6 +89,7 @@ CONFIG_PATTERNS = (
 )
 TOOL_PATTERNS = {
     "pytest": re.compile(r"\bpytest\b|py\.test"),
+    "tox": re.compile(r"\btox\b"),
     "ruff": re.compile(r"\bruff\b"),
     "mypy": re.compile(r"\bmypy\b"),
     "pyright": re.compile(r"\bpyright\b"),
@@ -236,6 +248,7 @@ def parse_log(text: str) -> ParsedLog:
         candidates.append((kind, tool, number, line.strip()[:MAX_TEXT]))
 
     has_pytest_summary = False
+    has_fatal_python = any(FATAL_PYTHON_RE.match(line.strip()) for line in norms)
     for number, line in enumerate(norms, start=1):
         if PYTEST_SUMMARY_RE.match(line):
             has_pytest_summary = True
@@ -311,7 +324,13 @@ def parse_log(text: str) -> ParsedLog:
             add("lint_format", "actionlint", number, stripped)
         elif PRE_COMMIT_HOOK_RE.match(stripped) or PRE_COMMIT_FAIL_RE.match(stripped):
             add("lint_format", "pre-commit", number, stripped)
+        elif TOX_FAIL_RE.match(stripped) or TOX_EVALUATION_RE.match(stripped):
+            add("test_failure", "tox", number, stripped)
         elif (
+            has_fatal_python
+            and "pytest" in tools
+            and (FATAL_PYTHON_RE.match(stripped) or PYTHON_STACK_FRAME_RE.match(stripped))
+        ) or (
             TEST_RUNNER_IMPORT_RE.match(stripped)
             or TEST_FRAME_RE.match(stripped)
             or (TEST_RUNNER_E_RE.match(stripped) and not has_pytest_summary)
