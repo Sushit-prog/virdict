@@ -1,0 +1,4 @@
+2026-11-20T10:00:00Z [32m##[group]Run ruff check .[0m
+2026-11-20T10:00:01Z [31msrc/x.py:3:1: E402 module import not at top of file[0m
+2026-11-20T10:00:02Z ##[error]Process completed with exit code 1.
+2026-11-20T10:00:03Z ##[group]Post job cleanup.

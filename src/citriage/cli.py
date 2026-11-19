@@ -8,12 +8,15 @@ from typing import Annotated
 import typer
 from dotenv import load_dotenv
 
+from citriage.cases import CASES_PATH, build_cases
 from citriage.collect import collect_repos
 from citriage.errors import AuthenticationError, CitriageError, MissingTokenError
 from citriage.github.client import GitHubClient
 from citriage.summary import render_summary
 
 app = typer.Typer(add_completion=False, no_args_is_help=True)
+cases_app = typer.Typer(add_completion=False, no_args_is_help=True)
+app.add_typer(cases_app, name="cases")
 
 
 def _load_env() -> None:
@@ -134,3 +137,17 @@ def collect(
         raise typer.Exit(2)
     if summary.has_errors:
         raise typer.Exit(1)
+
+
+@cases_app.command("build")
+def cases_build(
+    raw: Annotated[
+        Path,
+        typer.Option("--raw", help="Directory containing raw run snapshots."),
+    ] = Path("data/raw"),
+    out: Annotated[
+        Path,
+        typer.Option("--out", help="Output path for the cases index."),
+    ] = CASES_PATH,
+) -> None:
+    build_cases(raw, out)

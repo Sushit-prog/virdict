@@ -1,0 +1,4 @@
+2026-11-20T10:00:00.0000000Z ##[group]Run echo hi
+2026-11-20T10:00:00.1000000Z ##[error]Input required and not supplied: token
+2026-11-20T10:00:00.2000000Z ##[error]Process completed with exit code 1.
+2026-11-20T10:00:00.3000000Z ##[group]Post job cleanup.

@@ -1,0 +1,3 @@
+2026-11-20T10:00:00.0000000Z ##[group]Run make test
+2026-11-20T10:00:00.1000000Z ##[error]make: *** [Makefile:10: test] Error 2
+2026-11-20T10:00:00.2000000Z ##[group]Post job cleanup.

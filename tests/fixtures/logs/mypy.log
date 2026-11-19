@@ -1,0 +1,5 @@
+2026-11-20T10:00:00.0000000Z ##[group]Run mypy src
+2026-11-20T10:00:00.1000000Z src/pkg/mod.py:98: error: "PackageMetadata" has no attribute "get"  [attr-defined]
+2026-11-20T10:00:00.2000000Z Found 1 error in 1 file (checked 10 source files)
+2026-11-20T10:00:00.3000000Z ##[error]Process completed with exit code 1.
+2026-11-20T10:00:00.4000000Z ##[group]Post job cleanup.
