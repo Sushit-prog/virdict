@@ -1,12 +1,19 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
 
-from citriage.labels import Label, LabelName, append_label, load_labels
+from citriage.labels import (
+    Label,
+    LabelName,
+    append_label,
+    base_labeler,
+    latest_labels,
+    load_labels,
+)
 
 
 def _label(**overrides: object) -> Label:
@@ -134,3 +141,46 @@ def test_load_rejects_invalid_line_with_line_number(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match=r":2: invalid label"):
         load_labels(path)
+
+
+def test_latest_wins_and_undo_records_clear_latest_label(tmp_path: Path) -> None:
+    path = tmp_path / "labels.jsonl"
+    first = _label(case_id="c1", notes="first")
+    second = _label(
+        case_id="c1",
+        notes="second",
+        labeled_at=first.labeled_at + timedelta(seconds=1),
+    )
+    undo = Label(
+        case_id="c1",
+        repo=first.repo,
+        run_id=first.run_id,
+        job_id=first.job_id,
+        action="undo",
+        label=None,
+        supersedes=second.id,
+        labeler=first.labeler,
+        labeled_at=second.labeled_at + timedelta(seconds=1),
+    )
+
+    append_label(first, path)
+    append_label(second, path)
+
+    assert latest_labels(load_labels(path))[("c1", "alice")].notes == "second"
+
+    append_label(undo, path)
+
+    assert len(load_labels(path)) == 3
+    assert latest_labels(load_labels(path)) == {}
+
+
+def test_label_action_requires_label_only_for_label_records() -> None:
+    with pytest.raises(ValidationError):
+        _label(action="label", label=None)
+    with pytest.raises(ValidationError):
+        _label(action="undo", label=LabelName.UNKNOWN)
+
+
+def test_base_labeler_strips_second_round_suffix() -> None:
+    assert base_labeler("alice-r2") == "alice"
+    assert base_labeler("alice") == "alice"

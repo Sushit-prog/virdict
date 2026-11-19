@@ -4,11 +4,13 @@ import json
 from datetime import datetime
 from enum import StrEnum
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
+from uuid import uuid4
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 LABELS_PATH = Path("data/labels/labels.jsonl")
+LabelAction = Literal["label", "undo", "pending"]
 
 
 class LabelName(StrEnum):
@@ -24,10 +26,14 @@ class LabelName(StrEnum):
 class Label(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    id: str = Field(default_factory=lambda: uuid4().hex)
+    case_id: str = ""
     repo: str = Field(pattern=r"^[^/\s]+/[^/\s]+$")
     run_id: int = Field(gt=0)
     job_id: int = Field(gt=0)
-    label: LabelName
+    action: LabelAction = "label"
+    label: LabelName | None = None
+    supersedes: str | None = None
     flaky: bool | None = None
     culprit_file: str | None = None
     culprit_test: str | None = None
@@ -64,6 +70,39 @@ class Label(BaseModel):
             raise ValueError("labeler must not be empty")
         return value
 
+    @model_validator(mode="after")
+    def _validate_action_and_label(self) -> Label:
+        if self.action == "label" and self.label is None:
+            raise ValueError("label is required when action is 'label'")
+        if self.action != "label" and self.label is not None:
+            raise ValueError("label must be null when action is not 'label'")
+        return self
+
+
+def base_labeler(labeler: str) -> str:
+    return labeler[:-3] if labeler.endswith("-r2") else labeler
+
+
+def latest_labels(labels: list[Label]) -> dict[tuple[str, str], Label]:
+    latest: dict[tuple[str, str], Label] = {}
+    for record in labels:
+        key = (record.case_id, record.labeler)
+        current = latest.get(key)
+        if current is None or record.labeled_at >= current.labeled_at:
+            latest[key] = record
+    return {
+        key: record
+        for key, record in latest.items()
+        if record.action == "label" and record.label is not None
+    }
+
+
+def covered_labelers(labels: list[Label]) -> dict[str, set[str]]:
+    covered: dict[str, set[str]] = {}
+    for (case_id, labeler), _record in latest_labels(labels).items():
+        covered.setdefault(case_id, set()).add(base_labeler(labeler))
+    return covered
+
 
 def append_label(label: Label, path: Path = LABELS_PATH) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -89,7 +128,11 @@ def load_labels(path: Path = LABELS_PATH) -> list[Label]:
 __all__ = [
     "LABELS_PATH",
     "Label",
+    "LabelAction",
     "LabelName",
     "append_label",
+    "base_labeler",
+    "covered_labelers",
+    "latest_labels",
     "load_labels",
 ]

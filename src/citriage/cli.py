@@ -12,11 +12,13 @@ from citriage.cases import CASES_PATH, build_cases
 from citriage.collect import collect_repos
 from citriage.errors import AuthenticationError, CitriageError, MissingTokenError
 from citriage.github.client import GitHubClient
+from citriage.label_cli import label_app
 from citriage.summary import render_summary
 
 app = typer.Typer(add_completion=False, no_args_is_help=True)
 cases_app = typer.Typer(add_completion=False, no_args_is_help=True)
 app.add_typer(cases_app, name="cases")
+app.add_typer(label_app, name="label")
 
 
 def _load_env() -> None:

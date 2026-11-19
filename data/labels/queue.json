@@ -1,0 +1,1310 @@
+{
+  "seed": "citriage-label-v1",
+  "entries": [
+    {
+      "case_id": "44462376904:c76032d7",
+      "repo": "BerriAI/litellm",
+      "run_id": 44462376904,
+      "split": "test",
+      "workflow_name": "Conventional PR Title",
+      "step": "Check title against Conventional Commits",
+      "signature_rank": 1,
+      "flake_confirmed": false,
+      "tools_detected": [],
+      "selection_reason": "quota"
+    },
+    {
+      "case_id": "44583918870:ed8bb10a",
+      "repo": "BerriAI/litellm",
+      "run_id": 44583918870,
+      "split": "test",
+      "workflow_name": "Cost map guard",
+      "step": "Run the guard",
+      "signature_rank": 1,
+      "flake_confirmed": false,
+      "tools_detected": [
+        "uv"
+      ],
+      "selection_reason": "quota"
+    },
+    {
+      "case_id": "44595560026:dda3ba85",
+      "repo": "BerriAI/litellm",
+      "run_id": 44595560026,
+      "split": "test",
+      "workflow_name": "integration",
+      "step": "Run integration contracts",
+      "signature_rank": 1,
+      "flake_confirmed": false,
+      "tools_detected": [
+        "uv"
+      ],
+      "selection_reason": "quota"
+    },
+    {
+      "case_id": "44595560026:d3224247",
+      "repo": "BerriAI/litellm",
+      "run_id": 44595560026,
+      "split": "test",
+      "workflow_name": "integration",
+      "step": "Verify every case ran exactly once",
+      "signature_rank": 2,
+      "flake_confirmed": false,
+      "tools_detected": [
+        "uv"
+      ],
+      "selection_reason": "quota"
+    },
+    {
+      "case_id": "44603687801_a1:fcab481b",
+      "repo": "BerriAI/litellm",
+      "run_id": 44603687801,
+      "split": "test",
+      "workflow_name": "unit",
+      "step": "Run tests",
+      "signature_rank": 1,
+      "flake_confirmed": true,
+      "tools_detected": [
+        "pyright",
+        "pytest",
+        "uv"
+      ],
+      "selection_reason": "flake_minimum"
+    },
+    {
+      "case_id": "44605508330_a1:fcab481b",
+      "repo": "BerriAI/litellm",
+      "run_id": 44605508330,
+      "split": "dev",
+      "workflow_name": "unit",
+      "step": "Run tests",
+      "signature_rank": 1,
+      "flake_confirmed": true,
+      "tools_detected": [
+        "pytest",
+        "uv"
+      ],
+      "selection_reason": "flake_minimum"
+    },
+    {
+      "case_id": "44606414137:554291fe",
+      "repo": "BerriAI/litellm",
+      "run_id": 44606414137,
+      "split": "test",
+      "workflow_name": "lint",
+      "step": "Check basedpyright (delta vs merge-base counts)",
+      "signature_rank": 1,
+      "flake_confirmed": false,
+      "tools_detected": [
+        "basedpyright",
+        "uv"
+      ],
+      "selection_reason": "quota"
+    },
+    {
+      "case_id": "44606638596:247aab65",
+      "repo": "BerriAI/litellm",
+      "run_id": 44606638596,
+      "split": "dev",
+      "workflow_name": "LiteLLM Rust",
+      "step": "Run pytest tests/test_litellm_rust with the compiled extension",
+      "signature_rank": 1,
+      "flake_confirmed": false,
+      "tools_detected": [
+        "basedpyright",
+        "mypy",
+        "pip",
+        "pytest",
+        "ruff",
+        "uv"
+      ],
+      "selection_reason": "quota"
+    },
+    {
+      "case_id": "44607149913:9ae84a1d",
+      "repo": "BerriAI/litellm",
+      "run_id": 44607149913,
+      "split": "test",
+      "workflow_name": "smoke",
+      "step": "Import and CLI checks",
+      "signature_rank": 1,
+      "flake_confirmed": false,
+      "tools_detected": [
+        "uv"
+      ],
+      "selection_reason": "quota"
+    },
+    {
+      "case_id": "44607149913:c08349e2",
+      "repo": "BerriAI/litellm",
+      "run_id": 44607149913,
+      "split": "test",
+      "workflow_name": "smoke",
+      "step": "Import the SDK, the proxy server and the enterprise package",
+      "signature_rank": 2,
+      "flake_confirmed": false,
+      "tools_detected": [
+        "uv"
+      ],
+      "selection_reason": "quota"
+    },
+    {
+      "case_id": "44607149952:b58589bd",
+      "repo": "BerriAI/litellm",
+      "run_id": 44607149952,
+      "split": "test",
+      "workflow_name": "unit",
+      "step": "Check OpenAPI docs (POST routes without a request schema, description or 200 schema, delta vs the base branch)",
+      "signature_rank": 3,
+      "flake_confirmed": false,
+      "tools_detected": [
+        "uv"
+      ],
+      "selection_reason": "quota"
+    },
+    {
+      "case_id": "44607149952:fcab481b",
+      "repo": "BerriAI/litellm",
+      "run_id": 44607149952,
+      "split": "test",
+      "workflow_name": "unit",
+      "step": "Run tests",
+      "signature_rank": 1,
+      "flake_confirmed": false,
+      "tools_detected": [
+        "pytest",
+        "uv"
+      ],
+      "selection_reason": "quota"
+    },
+    {
+      "case_id": "44609277582:247aab65",
+      "repo": "BerriAI/litellm",
+      "run_id": 44609277582,
+      "split": "dev",
+      "workflow_name": "LiteLLM Rust",
+      "step": "Run pytest tests/test_litellm_rust with the compiled extension",
+      "signature_rank": 2,
+      "flake_confirmed": false,
+      "tools_detected": [
+        "basedpyright",
+        "mypy",
+        "pip",
+        "pytest",
+        "ruff",
+        "uv"
+      ],
+      "selection_reason": "quota"
+    },
+    {
+      "case_id": "44612518106:82ab6b42",
+      "repo": "BerriAI/litellm",
+      "run_id": 44612518106,
+      "split": "dev",
+      "workflow_name": "lint",
+      "step": "Check strict ruff rules (delta vs merge-base counts)",
+      "signature_rank": 1,
+      "flake_confirmed": false,
+      "tools_detected": [
+        "ruff",
+        "uv"
+      ],
+      "selection_reason": "quota"
+    },
+    {
+      "case_id": "44612518776:fcab481b",
+      "repo": "BerriAI/litellm",
+      "run_id": 44612518776,
+      "split": "dev",
+      "workflow_name": "unit",
+      "step": "Run tests",
+      "signature_rank": 1,
+      "flake_confirmed": false,
+      "tools_detected": [
+        "pip",
+        "pytest",
+        "uv"
+      ],
+      "selection_reason": "quota"
+    },
+    {
+      "case_id": "40378250526:948b59ab",
+      "repo": "aio-libs/aiohttp",
+      "run_id": 40378250526,
+      "split": "test",
+      "workflow_name": "AgentScan",
+      "step": "AgentScan",
+      "signature_rank": 1,
+      "flake_confirmed": false,
+      "tools_detected": [],
+      "selection_reason": "quota"
+    },
+    {
+      "case_id": "43090891397:f0cee027",
+      "repo": "aio-libs/aiohttp",
+      "run_id": 43090891397,
+      "split": "test",
+      "workflow_name": "CIFuzz",
+      "step": "Run Fuzzers",
+      "signature_rank": 1,
+      "flake_confirmed": false,
+      "tools_detected": [],
+      "selection_reason": "quota"
+    },
+    {
+      "case_id": "44493433986:68e93538",
+      "repo": "aio-libs/aiohttp",
+      "run_id": 44493433986,
+      "split": "test",
+      "workflow_name": "CI",
+      "step": "Re-run the failing tests with maximum verbosity",
+      "signature_rank": 1,
+      "flake_confirmed": false,
+      "tools_detected": [
+        "pytest",
+        "uv"
+      ],
+      "selection_reason": "quota"
+    },
+    {
+      "case_id": "44493433986:f58fa8d7",
+      "repo": "aio-libs/aiohttp",
+      "run_id": 44493433986,
+      "split": "test",
+      "workflow_name": "CI",
+      "step": "Run unittests",
+      "signature_rank": 2,
+      "flake_confirmed": false,
+      "tools_detected": [
+        "pytest",
+        "uv"
+      ],
+      "selection_reason": "quota"
+    },
+    {
+      "case_id": "44506777938:f58fa8d7",
+      "repo": "aio-libs/aiohttp",
+      "run_id": 44506777938,
+      "split": "test",
+      "workflow_name": "CI",
+      "step": "Run unittests",
+      "signature_rank": 1,
+      "flake_confirmed": false,
+      "tools_detected": [
+        "pytest",
+        "uv"
+      ],
+      "selection_reason": "quota"
+    },
+    {
+      "case_id": "43489033511:1e15e839",
+      "repo": "marimo-team/marimo",
+      "run_id": 43489033511,
+      "split": "test",
+      "workflow_name": "Org Actionlint",
+      "step": "Lint workflows",
+      "signature_rank": 1,
+      "flake_confirmed": false,
+      "tools_detected": [
+        "actionlint"
+      ],
+      "selection_reason": "quota"
+    },
+    {
+      "case_id": "44543555055:b5ada052",
+      "repo": "marimo-team/marimo",
+      "run_id": 44543555055,
+      "split": "test",
+      "workflow_name": "playwright",
+      "step": "Run dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36",
+      "signature_rank": 1,
+      "flake_confirmed": false,
+      "tools_detected": [],
+      "selection_reason": "quota"
+    },
+    {
+      "case_id": "44543555101:b5ada052",
+      "repo": "marimo-team/marimo",
+      "run_id": 44543555101,
+      "split": "test",
+      "workflow_name": "Test FE",
+      "step": "Run dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36",
+      "signature_rank": 2,
+      "flake_confirmed": false,
+      "tools_detected": [],
+      "selection_reason": "quota"
+    },
+    {
+      "case_id": "44543555259:b5ada052",
+      "repo": "marimo-team/marimo",
+      "run_id": 44543555259,
+      "split": "test",
+      "workflow_name": "AI SDK Compatibility",
+      "step": "Run dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36",
+      "signature_rank": 3,
+      "flake_confirmed": false,
+      "tools_detected": [],
+      "selection_reason": "quota"
+    },
+    {
+      "case_id": "44557595471:c2ae7e42",
+      "repo": "marimo-team/marimo",
+      "run_id": 44557595471,
+      "split": "test",
+      "workflow_name": "cli test",
+      "step": "\ud83e\uddea Run Pyodide acceptance test",
+      "signature_rank": 1,
+      "flake_confirmed": false,
+      "tools_detected": [],
+      "selection_reason": "quota"
+    },
+    {
+      "case_id": "44588791664:71723626",
+      "repo": "marimo-team/marimo",
+      "run_id": 44588791664,
+      "split": "dev",
+      "workflow_name": "Test BE",
+      "step": "Run ./.github/actions/test-python",
+      "signature_rank": 1,
+      "flake_confirmed": false,
+      "tools_detected": [
+        "basedpyright",
+        "pip",
+        "poetry",
+        "pytest",
+        "ruff",
+        "uv"
+      ],
+      "selection_reason": "quota"
+    },
+    {
+      "case_id": "44589372434:87b965ca",
+      "repo": "marimo-team/marimo",
+      "run_id": 44589372434,
+      "split": "dev",
+      "workflow_name": "\ud83d\udccb Pull Request Validation",
+      "step": "Run yogevbd/enforce-label-action@a3c219da6b8fa73f6ba62b68ff09c469b3a1c024",
+      "signature_rank": 1,
+      "flake_confirmed": false,
+      "tools_detected": [],
+      "selection_reason": "quota"
+    },
+    {
+      "case_id": "36859870036:715bd5e7",
+      "repo": "pydantic/pydantic",
+      "run_id": 36859870036,
+      "split": "test",
+      "workflow_name": "Pydantic people update",
+      "step": "Run ./.github/actions/people",
+      "signature_rank": 1,
+      "flake_confirmed": false,
+      "tools_detected": [
+        "uv"
+      ],
+      "selection_reason": "quota"
+    },
+    {
+      "case_id": "37568919883:21ae0b2a",
+      "repo": "pydantic/pydantic",
+      "run_id": 37568919883,
+      "split": "dev",
+      "workflow_name": "Dependencies Check",
+      "step": "Run make test",
+      "signature_rank": 1,
+      "flake_confirmed": false,
+      "tools_detected": [
+        "pytest",
+        "uv"
+      ],
+      "selection_reason": "quota"
+    },
+    {
+      "case_id": "40886028690:22916562",
+      "repo": "pydantic/pydantic",
+      "run_id": 40886028690,
+      "split": "test",
+      "workflow_name": "Third party tests",
+      "step": "Run Semantic Kernel tests",
+      "signature_rank": 1,
+      "flake_confirmed": false,
+      "tools_detected": [
+        "pytest",
+        "uv"
+      ],
+      "selection_reason": "quota"
+    },
+    {
+      "case_id": "42469579468_a2:d5cd2844",
+      "repo": "pydantic/pydantic",
+      "run_id": 42469579468,
+      "split": "dev",
+      "workflow_name": "codspeed",
+      "step": "Run CodSpeed benchmarks",
+      "signature_rank": 1,
+      "flake_confirmed": true,
+      "tools_detected": [
+        "uv"
+      ],
+      "selection_reason": "quota"
+    },
+    {
+      "case_id": "42473923650_a1:d5cd2844",
+      "repo": "pydantic/pydantic",
+      "run_id": 42473923650,
+      "split": "test",
+      "workflow_name": "codspeed",
+      "step": "Run CodSpeed benchmarks",
+      "signature_rank": 2,
+      "flake_confirmed": true,
+      "tools_detected": [
+        "uv"
+      ],
+      "selection_reason": "quota"
+    },
+    {
+      "case_id": "42477655670:d5cd2844",
+      "repo": "pydantic/pydantic",
+      "run_id": 42477655670,
+      "split": "test",
+      "workflow_name": "codspeed",
+      "step": "Run CodSpeed benchmarks",
+      "signature_rank": 3,
+      "flake_confirmed": false,
+      "tools_detected": [
+        "uv"
+      ],
+      "selection_reason": "quota"
+    },
+    {
+      "case_id": "44485422533_a1:6b176493",
+      "repo": "pydantic/pydantic",
+      "run_id": 44485422533,
+      "split": "test",
+      "workflow_name": "CI",
+      "step": "Run astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7",
+      "signature_rank": 2,
+      "flake_confirmed": true,
+      "tools_detected": [
+        "uv"
+      ],
+      "selection_reason": "flake_minimum"
+    },
+    {
+      "case_id": "44495930025_a1:ca54f62a",
+      "repo": "pydantic/pydantic",
+      "run_id": 44495930025,
+      "split": "test",
+      "workflow_name": "CI",
+      "step": "Store coverage files",
+      "signature_rank": 3,
+      "flake_confirmed": true,
+      "tools_detected": [
+        "pytest",
+        "uv"
+      ],
+      "selection_reason": "flake_minimum"
+    },
+    {
+      "case_id": "44595500440:3414af2f",
+      "repo": "pydantic/pydantic",
+      "run_id": 44595500440,
+      "split": "test",
+      "workflow_name": "CI",
+      "step": "Run pre-commit/action@2c7b3805fd2a0fd8c1884dcaebf91fc102a13ecd",
+      "signature_rank": 1,
+      "flake_confirmed": false,
+      "tools_detected": [
+        "mypy",
+        "pre-commit",
+        "pyright",
+        "ruff",
+        "uv"
+      ],
+      "selection_reason": "quota"
+    },
+    {
+      "case_id": "44596110241:5aacafda",
+      "repo": "pydantic/pydantic",
+      "run_id": 44596110241,
+      "split": "test",
+      "workflow_name": "Upload previews",
+      "step": "Run dawidd6/action-download-artifact@eab87c9830c39eff17e5a6eadb20bfb4bc880477",
+      "signature_rank": 1,
+      "flake_confirmed": false,
+      "tools_detected": [
+        "pip"
+      ],
+      "selection_reason": "quota"
+    },
+    {
+      "case_id": "38429463741_a1:b75adade",
+      "repo": "pypa/pip",
+      "run_id": 38429463741,
+      "split": "dev",
+      "workflow_name": "CI",
+      "step": "Run unit tests",
+      "signature_rank": 1,
+      "flake_confirmed": true,
+      "tools_detected": [
+        "pip",
+        "pytest",
+        "uv"
+      ],
+      "selection_reason": "flake_minimum"
+    },
+    {
+      "case_id": "38465510210_a1:b75adade",
+      "repo": "pypa/pip",
+      "run_id": 38465510210,
+      "split": "dev",
+      "workflow_name": "CI",
+      "step": "Run unit tests",
+      "signature_rank": 1,
+      "flake_confirmed": true,
+      "tools_detected": [
+        "pip",
+        "pytest",
+        "uv"
+      ],
+      "selection_reason": "flake_minimum"
+    },
+    {
+      "case_id": "44351371505:ac6daf42",
+      "repo": "pypa/pip",
+      "run_id": 44351371505,
+      "split": "test",
+      "workflow_name": "PR Checklist",
+      "step": "Check PR body",
+      "signature_rank": 1,
+      "flake_confirmed": false,
+      "tools_detected": [
+        "uv"
+      ],
+      "selection_reason": "quota"
+    },
+    {
+      "case_id": "40203273687_a1:73f13307",
+      "repo": "pytest-dev/pytest",
+      "run_id": 40203273687,
+      "split": "dev",
+      "workflow_name": "test",
+      "step": "Test without coverage",
+      "signature_rank": 1,
+      "flake_confirmed": true,
+      "tools_detected": [
+        "pip",
+        "pytest",
+        "uv"
+      ],
+      "selection_reason": "quota"
+    },
+    {
+      "case_id": "40214899480_a1:4e65dace",
+      "repo": "pytest-dev/pytest",
+      "run_id": 40214899480,
+      "split": "dev",
+      "workflow_name": "test",
+      "step": "Test with coverage",
+      "signature_rank": 2,
+      "flake_confirmed": true,
+      "tools_detected": [
+        "pip",
+        "pytest",
+        "uv"
+      ],
+      "selection_reason": "flake_minimum"
+    },
+    {
+      "case_id": "40286429432_a1:73f13307",
+      "repo": "pytest-dev/pytest",
+      "run_id": 40286429432,
+      "split": "test",
+      "workflow_name": "test",
+      "step": "Test without coverage",
+      "signature_rank": 3,
+      "flake_confirmed": true,
+      "tools_detected": [
+        "pip",
+        "pytest",
+        "uv"
+      ],
+      "selection_reason": "flake_minimum"
+    },
+    {
+      "case_id": "41496369554:4e65dace",
+      "repo": "pytest-dev/pytest",
+      "run_id": 41496369554,
+      "split": "test",
+      "workflow_name": "test",
+      "step": "Test with coverage",
+      "signature_rank": 1,
+      "flake_confirmed": false,
+      "tools_detected": [
+        "pip",
+        "pytest",
+        "uv"
+      ],
+      "selection_reason": "quota"
+    },
+    {
+      "case_id": "41496369554:73f13307",
+      "repo": "pytest-dev/pytest",
+      "run_id": 41496369554,
+      "split": "test",
+      "workflow_name": "test",
+      "step": "Test without coverage",
+      "signature_rank": 2,
+      "flake_confirmed": false,
+      "tools_detected": [
+        "pip",
+        "pytest",
+        "uv"
+      ],
+      "selection_reason": "quota"
+    },
+    {
+      "case_id": "41678445995:4e65dace",
+      "repo": "pytest-dev/pytest",
+      "run_id": 41678445995,
+      "split": "dev",
+      "workflow_name": "test",
+      "step": "Test with coverage",
+      "signature_rank": 1,
+      "flake_confirmed": false,
+      "tools_detected": [
+        "pip",
+        "pytest",
+        "uv"
+      ],
+      "selection_reason": "quota"
+    },
+    {
+      "case_id": "41686401464:4e65dace",
+      "repo": "pytest-dev/pytest",
+      "run_id": 41686401464,
+      "split": "test",
+      "workflow_name": "test",
+      "step": "Test with coverage",
+      "signature_rank": 1,
+      "flake_confirmed": false,
+      "tools_detected": [
+        "pip",
+        "pytest",
+        "uv"
+      ],
+      "selection_reason": "quota"
+    },
+    {
+      "case_id": "41686401464:73f13307",
+      "repo": "pytest-dev/pytest",
+      "run_id": 41686401464,
+      "split": "test",
+      "workflow_name": "test",
+      "step": "Test without coverage",
+      "signature_rank": 1,
+      "flake_confirmed": false,
+      "tools_detected": [
+        "pip",
+        "pytest",
+        "uv"
+      ],
+      "selection_reason": "quota"
+    },
+    {
+      "case_id": "41701436116:4e65dace",
+      "repo": "pytest-dev/pytest",
+      "run_id": 41701436116,
+      "split": "dev",
+      "workflow_name": "test",
+      "step": "Test with coverage",
+      "signature_rank": 1,
+      "flake_confirmed": false,
+      "tools_detected": [
+        "pip",
+        "pytest",
+        "uv"
+      ],
+      "selection_reason": "quota"
+    },
+    {
+      "case_id": "41701436116:73f13307",
+      "repo": "pytest-dev/pytest",
+      "run_id": 41701436116,
+      "split": "dev",
+      "workflow_name": "test",
+      "step": "Test without coverage",
+      "signature_rank": 2,
+      "flake_confirmed": false,
+      "tools_detected": [
+        "pip",
+        "pytest",
+        "uv"
+      ],
+      "selection_reason": "quota"
+    },
+    {
+      "case_id": "42137295651:73f13307",
+      "repo": "pytest-dev/pytest",
+      "run_id": 42137295651,
+      "split": "dev",
+      "workflow_name": "test",
+      "step": "Test without coverage",
+      "signature_rank": 1,
+      "flake_confirmed": false,
+      "tools_detected": [
+        "pip",
+        "pytest",
+        "uv"
+      ],
+      "selection_reason": "quota"
+    },
+    {
+      "case_id": "42140548288:e4a223bd",
+      "repo": "pytest-dev/pytest",
+      "run_id": 42140548288,
+      "split": "dev",
+      "workflow_name": "test",
+      "step": "Set up tox",
+      "signature_rank": 1,
+      "flake_confirmed": false,
+      "tools_detected": [
+        "pytest",
+        "uv"
+      ],
+      "selection_reason": "quota"
+    },
+    {
+      "case_id": "42319202830:73f13307",
+      "repo": "pytest-dev/pytest",
+      "run_id": 42319202830,
+      "split": "test",
+      "workflow_name": "test",
+      "step": "Test without coverage",
+      "signature_rank": 1,
+      "flake_confirmed": false,
+      "tools_detected": [
+        "pip",
+        "pytest",
+        "uv"
+      ],
+      "selection_reason": "quota"
+    },
+    {
+      "case_id": "42327706754:73f13307",
+      "repo": "pytest-dev/pytest",
+      "run_id": 42327706754,
+      "split": "test",
+      "workflow_name": "test",
+      "step": "Test without coverage",
+      "signature_rank": 1,
+      "flake_confirmed": false,
+      "tools_detected": [
+        "pip",
+        "pytest",
+        "uv"
+      ],
+      "selection_reason": "quota"
+    },
+    {
+      "case_id": "42685183091:4e65dace",
+      "repo": "pytest-dev/pytest",
+      "run_id": 42685183091,
+      "split": "dev",
+      "workflow_name": "test",
+      "step": "Test with coverage",
+      "signature_rank": 1,
+      "flake_confirmed": false,
+      "tools_detected": [
+        "pip",
+        "pytest",
+        "uv"
+      ],
+      "selection_reason": "quota"
+    },
+    {
+      "case_id": "42787461917:55e957e2",
+      "repo": "pytest-dev/pytest",
+      "run_id": 42787461917,
+      "split": "dev",
+      "workflow_name": "test",
+      "step": "Set up Python 3.11.2",
+      "signature_rank": 1,
+      "flake_confirmed": false,
+      "tools_detected": [
+        "pytest"
+      ],
+      "selection_reason": "quota"
+    },
+    {
+      "case_id": "43049244070:73f13307",
+      "repo": "pytest-dev/pytest",
+      "run_id": 43049244070,
+      "split": "test",
+      "workflow_name": "test",
+      "step": "Test without coverage",
+      "signature_rank": 2,
+      "flake_confirmed": false,
+      "tools_detected": [
+        "pip",
+        "pytest",
+        "uv"
+      ],
+      "selection_reason": "quota"
+    },
+    {
+      "case_id": "43162181446_a1:99769ed0",
+      "repo": "pytest-dev/pytest",
+      "run_id": 43162181446,
+      "split": "test",
+      "workflow_name": "test",
+      "step": "Set up Python 3.10",
+      "signature_rank": 1,
+      "flake_confirmed": true,
+      "tools_detected": [
+        "pip",
+        "pytest"
+      ],
+      "selection_reason": "flake_minimum"
+    },
+    {
+      "case_id": "43573214895:4e65dace",
+      "repo": "pytest-dev/pytest",
+      "run_id": 43573214895,
+      "split": "dev",
+      "workflow_name": "test",
+      "step": "Test with coverage",
+      "signature_rank": 1,
+      "flake_confirmed": false,
+      "tools_detected": [
+        "pip",
+        "pytest",
+        "uv"
+      ],
+      "selection_reason": "quota"
+    },
+    {
+      "case_id": "43573214895:73f13307",
+      "repo": "pytest-dev/pytest",
+      "run_id": 43573214895,
+      "split": "dev",
+      "workflow_name": "test",
+      "step": "Test without coverage",
+      "signature_rank": 1,
+      "flake_confirmed": false,
+      "tools_detected": [
+        "pip",
+        "pytest",
+        "uv"
+      ],
+      "selection_reason": "quota"
+    },
+    {
+      "case_id": "43658061995:c87085ff",
+      "repo": "pytest-dev/pytest",
+      "run_id": 43658061995,
+      "split": "test",
+      "workflow_name": "Doc Check Links",
+      "step": "Run sphinx linkcheck via tox",
+      "signature_rank": 1,
+      "flake_confirmed": false,
+      "tools_detected": [
+        "pip",
+        "pytest",
+        "uv"
+      ],
+      "selection_reason": "quota"
+    },
+    {
+      "case_id": "43887502831:4e65dace",
+      "repo": "pytest-dev/pytest",
+      "run_id": 43887502831,
+      "split": "test",
+      "workflow_name": "test",
+      "step": "Test with coverage",
+      "signature_rank": 1,
+      "flake_confirmed": false,
+      "tools_detected": [
+        "pip",
+        "pytest",
+        "uv"
+      ],
+      "selection_reason": "quota"
+    },
+    {
+      "case_id": "43887502831:73f13307",
+      "repo": "pytest-dev/pytest",
+      "run_id": 43887502831,
+      "split": "test",
+      "workflow_name": "test",
+      "step": "Test without coverage",
+      "signature_rank": 2,
+      "flake_confirmed": false,
+      "tools_detected": [
+        "pip",
+        "pytest",
+        "uv"
+      ],
+      "selection_reason": "quota"
+    },
+    {
+      "case_id": "43936006727:4e65dace",
+      "repo": "pytest-dev/pytest",
+      "run_id": 43936006727,
+      "split": "dev",
+      "workflow_name": "test",
+      "step": "Test with coverage",
+      "signature_rank": 1,
+      "flake_confirmed": false,
+      "tools_detected": [
+        "pip",
+        "pytest",
+        "uv"
+      ],
+      "selection_reason": "quota"
+    },
+    {
+      "case_id": "43936006727:73f13307",
+      "repo": "pytest-dev/pytest",
+      "run_id": 43936006727,
+      "split": "dev",
+      "workflow_name": "test",
+      "step": "Test without coverage",
+      "signature_rank": 1,
+      "flake_confirmed": false,
+      "tools_detected": [
+        "pip",
+        "pytest",
+        "uv"
+      ],
+      "selection_reason": "quota"
+    },
+    {
+      "case_id": "44479143458:73f13307",
+      "repo": "pytest-dev/pytest",
+      "run_id": 44479143458,
+      "split": "test",
+      "workflow_name": "test",
+      "step": "Test without coverage",
+      "signature_rank": 1,
+      "flake_confirmed": false,
+      "tools_detected": [
+        "pip",
+        "pytest",
+        "uv"
+      ],
+      "selection_reason": "quota"
+    },
+    {
+      "case_id": "36312975783:2507b0dc",
+      "repo": "python-poetry/poetry",
+      "run_id": 36312975783,
+      "split": "test",
+      "workflow_name": "Tests",
+      "step": "Run poetry run pytest --integration -v",
+      "signature_rank": 1,
+      "flake_confirmed": false,
+      "tools_detected": [
+        "pip",
+        "poetry",
+        "pytest"
+      ],
+      "selection_reason": "quota"
+    },
+    {
+      "case_id": "37765438663:2507b0dc",
+      "repo": "python-poetry/poetry",
+      "run_id": 37765438663,
+      "split": "test",
+      "workflow_name": "Tests",
+      "step": "Run poetry run pytest --integration -v",
+      "signature_rank": 1,
+      "flake_confirmed": false,
+      "tools_detected": [
+        "pip",
+        "poetry",
+        "pytest"
+      ],
+      "selection_reason": "quota"
+    },
+    {
+      "case_id": "38050452795:2507b0dc",
+      "repo": "python-poetry/poetry",
+      "run_id": 38050452795,
+      "split": "test",
+      "workflow_name": "Tests",
+      "step": "Run poetry run pytest --integration -v",
+      "signature_rank": 3,
+      "flake_confirmed": false,
+      "tools_detected": [
+        "pip",
+        "poetry",
+        "pytest"
+      ],
+      "selection_reason": "quota"
+    },
+    {
+      "case_id": "38071133373:2507b0dc",
+      "repo": "python-poetry/poetry",
+      "run_id": 38071133373,
+      "split": "test",
+      "workflow_name": "Tests",
+      "step": "Run poetry run pytest --integration -v",
+      "signature_rank": 3,
+      "flake_confirmed": false,
+      "tools_detected": [
+        "pip",
+        "poetry",
+        "pytest"
+      ],
+      "selection_reason": "quota"
+    },
+    {
+      "case_id": "41204881585:fe924e0b",
+      "repo": "python-poetry/poetry",
+      "run_id": 41204881585,
+      "split": "test",
+      "workflow_name": "Tests",
+      "step": "Run poetry run mypy",
+      "signature_rank": 1,
+      "flake_confirmed": false,
+      "tools_detected": [
+        "mypy",
+        "poetry"
+      ],
+      "selection_reason": "quota"
+    },
+    {
+      "case_id": "41972702632:fe924e0b",
+      "repo": "python-poetry/poetry",
+      "run_id": 41972702632,
+      "split": "dev",
+      "workflow_name": "Tests",
+      "step": "Run poetry run mypy",
+      "signature_rank": 1,
+      "flake_confirmed": false,
+      "tools_detected": [
+        "mypy",
+        "poetry"
+      ],
+      "selection_reason": "quota"
+    },
+    {
+      "case_id": "42467077072_a3:e82d89ac",
+      "repo": "python-poetry/poetry",
+      "run_id": 42467077072,
+      "split": "test",
+      "workflow_name": "Tests",
+      "step": "Run python-poetry/poetry/.github/actions/bootstrap-poetry@fc845fbacf502eda5504efad5bbec6915c1a9f00",
+      "signature_rank": 1,
+      "flake_confirmed": true,
+      "tools_detected": [
+        "mypy",
+        "poetry",
+        "pytest"
+      ],
+      "selection_reason": "flake_minimum"
+    },
+    {
+      "case_id": "43686765495:40556fe5",
+      "repo": "python-poetry/poetry",
+      "run_id": 43686765495,
+      "split": "dev",
+      "workflow_name": "Documentation Preview",
+      "step": "Run amondnet/vercel-action@de09aeac2ace6599ec9b11ef87558759a496bac4",
+      "signature_rank": 1,
+      "flake_confirmed": false,
+      "tools_detected": [
+        "poetry",
+        "pre-commit"
+      ],
+      "selection_reason": "quota"
+    },
+    {
+      "case_id": "44458610355:2507b0dc",
+      "repo": "python-poetry/poetry",
+      "run_id": 44458610355,
+      "split": "dev",
+      "workflow_name": "Tests",
+      "step": "Run poetry run pytest --integration -v",
+      "signature_rank": 1,
+      "flake_confirmed": false,
+      "tools_detected": [
+        "poetry",
+        "pytest"
+      ],
+      "selection_reason": "quota"
+    },
+    {
+      "case_id": "41466455390_a1:b0df794b",
+      "repo": "tox-dev/tox",
+      "run_id": 41466455390,
+      "split": "test",
+      "workflow_name": "\ud83e\uddea check",
+      "step": "\ud83d\udce4 Upload test timings",
+      "signature_rank": 2,
+      "flake_confirmed": true,
+      "tools_detected": [
+        "pip",
+        "pytest",
+        "uv"
+      ],
+      "selection_reason": "flake_minimum"
+    },
+    {
+      "case_id": "41923681150_a1:d9bb7158",
+      "repo": "tox-dev/tox",
+      "run_id": 41923681150,
+      "split": "dev",
+      "workflow_name": "\ud83d\udcdd Changelog",
+      "step": "\ud83d\udd0d Validate news fragments",
+      "signature_rank": 1,
+      "flake_confirmed": true,
+      "tools_detected": [
+        "uv"
+      ],
+      "selection_reason": "flake_minimum"
+    },
+    {
+      "case_id": "41924241202_a1:d9bb7158",
+      "repo": "tox-dev/tox",
+      "run_id": 41924241202,
+      "split": "test",
+      "workflow_name": "\ud83d\udcdd Changelog",
+      "step": "\ud83d\udd0d Validate news fragments",
+      "signature_rank": 2,
+      "flake_confirmed": true,
+      "tools_detected": [
+        "uv"
+      ],
+      "selection_reason": "flake_minimum"
+    },
+    {
+      "case_id": "43480703311:473ff47c",
+      "repo": "tox-dev/tox",
+      "run_id": 43480703311,
+      "split": "test",
+      "workflow_name": "\ud83e\uddea check",
+      "step": "\ud83e\uddf9 Run every hook under the cooldown",
+      "signature_rank": 1,
+      "flake_confirmed": false,
+      "tools_detected": [
+        "pip",
+        "ruff",
+        "uv"
+      ],
+      "selection_reason": "quota"
+    },
+    {
+      "case_id": "44160826691:d9bb7158",
+      "repo": "tox-dev/tox",
+      "run_id": 44160826691,
+      "split": "test",
+      "workflow_name": "\ud83d\udcdd Changelog",
+      "step": "\ud83d\udd0d Validate news fragments",
+      "signature_rank": 3,
+      "flake_confirmed": false,
+      "tools_detected": [
+        "uv"
+      ],
+      "selection_reason": "quota"
+    },
+    {
+      "case_id": "39470501396:3c055f7c",
+      "repo": "urllib3/urllib3",
+      "run_id": 39470501396,
+      "split": "test",
+      "workflow_name": "Downstream",
+      "step": "Run downstream tests",
+      "signature_rank": 1,
+      "flake_confirmed": false,
+      "tools_detected": [
+        "pip",
+        "pytest",
+        "uv"
+      ],
+      "selection_reason": "quota"
+    },
+    {
+      "case_id": "39659366549_a1:852ebbed",
+      "repo": "urllib3/urllib3",
+      "run_id": 39659366549,
+      "split": "dev",
+      "workflow_name": "CI",
+      "step": "Upload coverage data",
+      "signature_rank": 1,
+      "flake_confirmed": true,
+      "tools_detected": [
+        "pytest",
+        "uv"
+      ],
+      "selection_reason": "flake_minimum"
+    },
+    {
+      "case_id": "42310471228_a1:fcab481b",
+      "repo": "urllib3/urllib3",
+      "run_id": 42310471228,
+      "split": "dev",
+      "workflow_name": "CI",
+      "step": "Run tests",
+      "signature_rank": 1,
+      "flake_confirmed": true,
+      "tools_detected": [
+        "pytest",
+        "uv"
+      ],
+      "selection_reason": "flake_minimum"
+    },
+    {
+      "case_id": "44423577301:b06654ce",
+      "repo": "urllib3/urllib3",
+      "run_id": 44423577301,
+      "split": "test",
+      "workflow_name": "CI",
+      "step": "Combine & check coverage",
+      "signature_rank": 1,
+      "flake_confirmed": false,
+      "tools_detected": [
+        "uv"
+      ],
+      "selection_reason": "quota"
+    },
+    {
+      "case_id": "44428762233:19f372e4",
+      "repo": "urllib3/urllib3",
+      "run_id": 44428762233,
+      "split": "test",
+      "workflow_name": "lint",
+      "step": "Lint code",
+      "signature_rank": 1,
+      "flake_confirmed": false,
+      "tools_detected": [
+        "pip",
+        "pre-commit",
+        "uv"
+      ],
+      "selection_reason": "quota"
+    },
+    {
+      "case_id": "44429009657:fcab481b",
+      "repo": "urllib3/urllib3",
+      "run_id": 44429009657,
+      "split": "test",
+      "workflow_name": "CI",
+      "step": "Run tests",
+      "signature_rank": 1,
+      "flake_confirmed": false,
+      "tools_detected": [
+        "pytest",
+        "uv"
+      ],
+      "selection_reason": "quota"
+    }
+  ],
+  "relaxations": [
+    "signature_rank from <=2 to <=3",
+    "per-repo cap from 12 to 15"
+  ],
+  "shortfalls": [
+    "test short by 4"
+  ]
+}
