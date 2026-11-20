@@ -3,11 +3,12 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import sys
 from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Annotated, Literal, TextIO
 
 import typer
 from pydantic import BaseModel, ConfigDict, Field
@@ -23,7 +24,6 @@ from citriage.labels import (
     latest_labels,
     load_labels,
 )
-from citriage.parse.logparse import EXIT_CODE_RE, _normalize
 from citriage.storage import log_path
 
 QUEUE_PATH = Path("data/labels/queue.json")
@@ -33,6 +33,15 @@ SPLIT_MAINS = {"dev": 30, "test": 60}
 FLAKE_MINIMUM = 15
 TOOL_MINIMUM = 10
 TOOL_NAMES = {"ruff", "mypy", "pyright", "basedpyright", "pip", "uv", "poetry"}
+ANSI_RE = re.compile(r"\x1b\[[0-?]*[ -/]*[@-~]")
+TIMESTAMP_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z\s*")
+WORKER_RE = re.compile(r"^\[[^\]]+\]\s*")
+PROGRESS_RE = re.compile(r"^\[\s*\d+%\]\s*")
+EXIT_CODE_RE = re.compile(r"^##\[error\]Process completed with exit code \d+\.?$")
+SHORT_SUMMARY_RE = re.compile(r"short test summary info")
+PYTEST_FAILURE_RE = re.compile(r"^(FAILED|ERROR)\b")
+PYTEST_TOTAL_RE = re.compile(r"^=+.*\b\d+\s+(?:failed|errors?|passed)\b.*=+$")
+DISPLAY_LINE_LIMIT = 300
 LABEL_CHOICES = list(LabelName)
 SelectionReason = Literal["flake_minimum", "tool_minimum", "quota"]
 label_app = typer.Typer(add_completion=False, no_args_is_help=True)
@@ -248,6 +257,24 @@ def _configure_console() -> None:
         reconfigure(encoding="utf-8", errors="replace")
 
 
+def _display_text(line: str) -> str:
+    return ANSI_RE.sub("", line)
+
+
+def _normalized_log_line(line: str) -> str:
+    text = TIMESTAMP_RE.sub("", _display_text(line))
+    text = WORKER_RE.sub("", text)
+    text = PROGRESS_RE.sub("", text)
+    return text.strip()
+
+
+def _format_log_line(number: int, line: str) -> str:
+    text = _display_text(line)
+    if len(text) > DISPLAY_LINE_LIMIT:
+        text = text[: DISPLAY_LINE_LIMIT - 3] + "..."
+    return f"{number:6d} | {text}"
+
+
 def _raw_log_lines(case: Case, raw_root: Path = RAW_ROOT) -> tuple[Path, list[str], int]:
     path = log_path(
         raw_root,
@@ -259,23 +286,63 @@ def _raw_log_lines(case: Case, raw_root: Path = RAW_ROOT) -> tuple[Path, list[st
     if not path.exists():
         return path, [], 0
     lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
-    norms = [_normalize(line).strip() for line in lines]
+    norms = [_normalized_log_line(line) for line in lines]
     anchors = [index for index, line in enumerate(norms) if EXIT_CODE_RE.match(line)]
     anchor = anchors[-1] if anchors else len(lines)
     return path, lines, anchor
 
 
-def render_case(case: Case, raw_root: Path = RAW_ROOT, context_lines: int = 40) -> str:
+def _context_chunk_numbers(
+    lines: list[str], anchor: int, chunk_size: int, chunk_index: int
+) -> list[int]:
+    if chunk_size <= 0 or chunk_index < 0:
+        return []
+    chunk_end = max(0, anchor - chunk_size * chunk_index)
+    chunk_start = max(0, chunk_end - chunk_size)
+    if chunk_start >= chunk_end or chunk_start >= len(lines):
+        return []
+    return list(range(chunk_start + 1, min(chunk_end, len(lines)) + 1))
+
+
+def _pinned_log_evidence(lines: list[str]) -> list[str]:
+    norms = [_normalized_log_line(line) for line in lines]
+    ordered: list[int] = []
+    selected: set[int] = set()
+
+    def add(index: int) -> None:
+        if index not in selected:
+            selected.add(index)
+            ordered.append(index)
+
+    summary_indices = [index for index, text in enumerate(norms) if SHORT_SUMMARY_RE.search(text)]
+    if summary_indices:
+        start = summary_indices[-1]
+        add(start)
+        for index in range(start + 1, len(lines)):
+            text = norms[index]
+            if not text or PYTEST_TOTAL_RE.match(text):
+                break
+            if PYTEST_FAILURE_RE.match(text):
+                add(index)
+    for index, text in enumerate(norms):
+        if PYTEST_FAILURE_RE.match(text):
+            add(index)
+    total_indices = [index for index, text in enumerate(norms) if PYTEST_TOTAL_RE.match(text)]
+    if total_indices:
+        add(total_indices[-1])
+    return [_format_log_line(index + 1, lines[index]) for index in ordered]
+
+
+def render_case(
+    case: Case,
+    raw_root: Path = RAW_ROOT,
+    context_lines: int = 40,
+    context_chunk: int = 0,
+) -> str:
     path, lines, anchor = _raw_log_lines(case, raw_root)
-    start = max(0, anchor - context_lines)
-    context = [f"{number:6d} | {lines[number - 1]}" for number in range(start + 1, anchor + 1)]
-    evidence = [
-        (
-            f"EVIDENCE {index}: id={item.id} kind={item.kind} line={item.line_no} "
-            f"tool={item.tool} text={item.text}"
-        )
-        for index, item in enumerate(case.evidence, start=1)
-    ]
+    numbers = _context_chunk_numbers(lines, anchor, context_lines, context_chunk)
+    context = [_format_log_line(number, lines[number - 1]) for number in numbers]
+    evidence = _pinned_log_evidence(lines)
     return "\n".join(
         [
             f"case_id: {case.case_id}",
@@ -284,9 +351,9 @@ def render_case(case: Case, raw_root: Path = RAW_ROOT, context_lines: int = 40) 
             f"failed steps: {', '.join(case.failed_step_names)}",
             f"html_url: {case.html_url}",
             f"raw log: {path}",
-            "evidence:",
+            "pinned log evidence:",
             *(evidence or ["  (none)"]),
-            f"log context ({len(context)} lines before exit-code anchor):",
+            f"log context chunk {context_chunk}:",
             *(context or ["  (no log text available)"]),
         ]
     )
@@ -304,8 +371,33 @@ def _parse_evidence_lines(raw: str) -> list[int]:
     return sorted(set(values))
 
 
+def _discard_pending_input(stream: TextIO | None = None) -> None:
+    stdin = stream if stream is not None else sys.stdin
+    if not stdin.isatty():
+        return
+    platform = str(sys.platform)
+    if platform == "win32":
+        import msvcrt
+
+        while msvcrt.kbhit():
+            msvcrt.getwch()
+        return
+    import select
+
+    fd = stdin.fileno()
+    while select.select([fd], [], [], 0)[0]:
+        if stdin.readline() == "":
+            break
+
+
 def _prompt(label: str) -> str:
-    return input(label).strip()
+    raw = input(label)
+    _discard_pending_input()
+    return raw.splitlines()[0].strip() if raw else ""
+
+
+def _normalize_command(raw: str) -> str:
+    return raw.strip().upper()
 
 
 def _make_record(
@@ -400,34 +492,50 @@ def label_next(
         if case is None:
             print(f"skip missing case {case_id}")
             continue
+        context_size = 40
+        context_chunk = 0
         print()
-        print(render_case(case, raw_root))
+        print(render_case(case, raw_root, context_lines=context_size, context_chunk=context_chunk))
         while True:
-            command = _prompt("label [1-7], m=more, s=skip, u=undo, q=quit> ").lower()
-            if command == "m":
-                print(render_case(case, raw_root, context_lines=150))
+            command = _normalize_command(_prompt("label [1-7], m=more, s=skip, u=undo, q=quit> "))
+            if command == "M":
+                _, lines, anchor = _raw_log_lines(case, raw_root)
+                if _context_chunk_numbers(lines, anchor, context_size, context_chunk + 1):
+                    context_chunk += 1
+                    print(
+                        render_case(
+                            case,
+                            raw_root,
+                            context_lines=context_size,
+                            context_chunk=context_chunk,
+                        )
+                    )
+                else:
+                    print("start of log reached")
                 continue
-            if command == "s":
+            if command == "S":
                 break
-            if command == "q":
+            if command == "Q":
                 print("Stopped.")
                 return
-            if command == "u":
+            if command == "U":
                 if last_record is None:
                     print("Nothing to undo.")
                     continue
                 undo = _make_undo_record(last_record, labeler)
                 append_label(undo, labels_path)
                 last_record = None
-                print(f"undid {undo.supersedes}; flake_confirmed={case.flake_confirmed}")
+                print(f"undid {undo.supersedes}")
                 break
             if not command.isdigit() or not 1 <= int(command) <= len(LABEL_CHOICES):
-                print("Invalid command. Enter 1-7, m, s, u, or q.")
+                print("Invalid command. Valid: 1-7, M, S, U, Q.")
                 continue
             label = LABEL_CHOICES[int(command) - 1]
             culprit_file_raw = _prompt("culprit_file (blank for null): ")
             culprit_test_raw = _prompt("culprit_test (blank for null): ")
-            evidence_raw = _prompt("evidence line numbers (comma-separated, blank for none): ")
+            evidence_raw = _prompt(
+                "evidence line numbers from displayed log (comma-separated, blank for none): "
+            )
             try:
                 evidence_lines = _parse_evidence_lines(evidence_raw)
                 record = _make_record(
@@ -445,8 +553,7 @@ def label_next(
             append_label(record, labels_path)
             last_record = record
             label_value = record.label.value if record.label is not None else "unknown"
-            print(f"saved {record.id} label={label_value}; flake_confirmed={case.flake_confirmed}")
-            print(f"flaky recorded as {record.flaky!r}")
+            print(f"saved {record.id} label={label_value}")
             break
 
     print(f"done; {len(remaining)} queued cases offered for split={split}")
